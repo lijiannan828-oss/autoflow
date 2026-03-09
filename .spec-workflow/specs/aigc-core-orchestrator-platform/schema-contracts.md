@@ -1047,6 +1047,247 @@ interface FeedbackRecord extends SchemaMeta {
 }
 ```
 
+### 5.5 Agent 记忆（v2.2 新增）
+
+```typescript
+// agent_memory 表（PostgreSQL）
+interface AgentMemory extends SchemaMeta {
+  memory_id: string;
+  agent_name: string;                  // "visual_director" | "shot_designer" | ...
+  memory_type: "task_summary" | "lesson_learned" | "preference" | "statistics";
+  scope: "global" | "project" | "episode";
+  scope_id?: string;
+
+  content: {
+    key: string;                       // "character_太后_best_practice"
+    value: any;
+    confidence: number;                // 越常被验证越高
+  };
+
+  created_at: string;
+  last_accessed_at: string;
+  access_count: number;
+}
+```
+
+### 5.6 Prompt 资产库（v2.2 新增）
+
+```typescript
+interface PromptAsset extends SchemaMeta {
+  prompt_id: string;
+  agent_name: string;                  // 归属 Agent
+  prompt_stage: string;                // "script_parse" | "shot_design" | "visual_prompt" | "qc_review" | ...
+
+  // === 母版 ===
+  master_template: {
+    version: string;                   // "v3.2"
+    system_prompt: string;
+    output_schema_ref: string;         // 指向 schema-contracts.md 中的类型
+    locked_by: string;                 // 锁定确认人
+    locked_at: string;
+  };
+
+  // === 题材适配器库 ===
+  genre_adapters: {
+    genre_tag: string;                 // "古装宫斗" | "现代悬疑" | "甜宠" | ...
+    adapter_prompt: string;            // 注入到 system_prompt 的差异化片段
+    few_shot_examples: RAGCaseRef[];   // 关联的经典案例
+    style_keywords: string[];          // 影响 visual_prompt 的风格关键词
+    created_by: "human" | "agent";
+    performance_stats: {
+      total_uses: number;
+      avg_qc_score: number;
+      human_approval_rate: number;
+    };
+  }[];
+
+  // === 版本历史 ===
+  version_history: PromptVersion[];
+}
+
+interface RAGCaseRef {
+  chain_id: string;
+  relevance_score: number;
+}
+
+interface PromptVersion {
+  version: string;
+  changed_by: "human" | "agent";
+  change_reason: string;
+  created_at: string;
+  a_b_test_result?: {
+    test_id: string;
+    improvement_pct: number;
+    adopted: boolean;
+  };
+}
+```
+
+### 5.7 RAG 链路级案例（v2.2 新增）
+
+```typescript
+interface RAGChainCase extends SchemaMeta {
+  chain_id: string;                    // 链路唯一 ID
+  quality_score: number;               // >= 9.0 才入库
+  case_type: "positive" | "negative" | "corrective";
+
+  // === 全链路碎片资产，通过 chain_id 关联 ===
+  chain_assets: {
+    script_fragment: string;           // 原始剧本片段
+    shot_spec: ShotSpec;               // 分镜规格
+    visual_prompt: string;             // 使用的画面 prompt
+    negative_prompt: string;
+    generation_params: Record<string, any>;
+    keyframe_images: StorageRef[];
+    video: StorageRef;
+    audio_config: {
+      tts_params: any;
+      bgm_style: string;
+      sfx_tags: string[];
+    };
+    qc_scores: QualityScore;
+    human_feedback?: string;
+  };
+
+  // === 检索标签（用于向量+标签混合检索）===
+  retrieval_tags: {
+    genre: string;
+    scene_type: string;               // "多人对话" | "动作打斗" | "独白特写" | ...
+    emotion: EmotionTag;
+    difficulty: ShotDifficulty;
+    shot_type: ShotType;
+    camera_movement: CameraMovement;
+    character_count: number;
+    has_dialogue: boolean;
+    location_type: string;
+  };
+
+  // === 向量 embedding ===
+  embedding_visual_prompt: number[];
+  embedding_script_fragment: number[];
+
+  // === 元信息 ===
+  source_project_id: string;
+  source_episode: number;
+  source_shot_id: string;
+  created_at: string;
+  retrieval_count: number;
+}
+```
+
+### 5.8 项目集与发行需求（v2.2 新增）
+
+```typescript
+interface ProjectGroup extends SchemaMeta {
+  group_id: string;
+  name: string;                         // "YouTube Shorts 2026Q2"
+  platform: string;                     // "youtube_shorts" | "tiktok" | "reels"
+
+  platform_constraints: {
+    aspect_ratio: AspectRatio;
+    max_duration_sec: number;
+    min_duration_sec: number;
+    max_file_size_mb: number;
+    video_codec: string;
+    fps: number;
+    subtitle_style: "hardcode" | "srt" | "none";
+    watermark_required: boolean;
+    content_rating: string;
+  };
+
+  style_preferences: {
+    pacing: "fast" | "medium" | "slow";
+    hook_duration_sec: number;
+    cliffhanger_required: boolean;
+    bgm_loudness_ratio: number;
+    text_overlay_style?: string;
+  };
+
+  compliance_rules: {
+    forbidden_content: string[];
+    required_disclaimers?: string[];
+    music_copyright: "royalty_free_only" | "licensed_ok";
+  };
+}
+
+interface ProjectRequirements extends SchemaMeta {
+  project_id: string;
+  group_id: string;
+
+  overrides: {
+    special_instructions: string;
+    brand_assets?: {
+      logo_url?: string;
+      intro_video_url?: string;
+      outro_video_url?: string;
+    };
+    target_audience_notes?: string;
+    partner_review_required: boolean;
+  };
+}
+```
+
+### 5.9 Agent 决策追踪（v2.2 新增）
+
+```typescript
+interface AgentTrace extends SchemaMeta {
+  trace_id: string;
+  agent_name: string;
+  node_id: string;
+  run_id: string;
+  episode_id: string;
+  shot_id?: string;
+
+  decision_steps: {
+    step: "context" | "retrieval" | "strategy" | "execution" | "self_check" | "record";
+    input_summary: string;
+    output_summary: string;
+    duration_ms: number;
+    model_used?: string;
+    rag_cases_retrieved?: string[];
+    memories_accessed?: string[];
+  }[];
+
+  final_strategy: Record<string, any>;
+  quality_score?: number;
+  cost_cny?: number;
+  created_at: string;
+}
+```
+
+### 5.10 成本事件（v2.2 新增）
+
+```typescript
+interface CostEvent extends SchemaMeta {
+  event_id: string;
+  run_id: string;
+  node_id: string;
+  episode_id: string;
+  shot_id?: string;
+
+  cost_type: "llm_api" | "gpu_compute" | "tts_api" | "storage" | "external_api";
+  provider: string;                    // "gemini" | "claude" | "comfyui" | "elevenlabs" | ...
+  model_name?: string;
+  amount_cny: number;
+
+  usage_detail: {
+    token_in?: number;
+    token_out?: number;
+    gpu_seconds?: number;
+    api_calls?: number;
+  };
+
+  budget_context: {
+    episode_budget_cny: number;
+    episode_spent_cny: number;
+    budget_utilization: number;
+    over_budget_alert: boolean;
+  };
+
+  created_at: string;
+}
+```
+
 ---
 
 ## 附录 B：运行时上下文层

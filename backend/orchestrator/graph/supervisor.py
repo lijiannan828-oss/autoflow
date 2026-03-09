@@ -19,6 +19,7 @@ from .topology import (
     PIPELINE_NODES,
     QC_NODES,
     QC_REJECT_TARGET,
+    SUPERVISOR_CHECKPOINT_NODES,
     is_gate,
     should_skip_in_rerun,
     stage_no_for_node,
@@ -84,24 +85,34 @@ def supervisor_node(state: PipelineState) -> dict[str, Any]:
     completed = set(state.get("completed_nodes", []))
     completed.add(node_id)
 
+    # ── v2.2: Supervisor 横切检查 ─────────────────────────────────────
+    # 在检查点节点完成后，触发 SupervisorAgent 成本+合规校验
+    supervisor_result = _run_supervisor_checkpoint(node_id, state)
+
     nxt = _advance(node_id, state, completed)
     if nxt is None:
         logger.info("supervisor: pipeline complete after %s", node_id)
-        return {
+        result: dict[str, Any] = {
             "should_terminate": True,
             "termination_reason": "pipeline_complete",
             "current_node_id": None,
             "completed_nodes": list(completed),
         }
+        if supervisor_result:
+            result.update(supervisor_result)
+        return result
 
     logger.info("supervisor: %s → %s", node_id, nxt)
-    return {
+    result = {
         "next_node_id": nxt,
         "current_node_id": nxt,
         "current_stage_no": stage_no_for_node(nxt),
         "completed_nodes": list(completed),
         "gate": None,  # clear any stale gate state
     }
+    if supervisor_result:
+        result.update(supervisor_result)
+    return result
 
 
 # ── Routing function (consumed by add_conditional_edges) ────────────────
@@ -198,6 +209,80 @@ def _handle_auto_reject(state: PipelineState, qc_node_id: str) -> dict[str, Any]
         "current_stage_no": stage_no_for_node(reject_target),
         "auto_reject_counts": counters,
     }
+
+
+def _run_supervisor_checkpoint(
+    node_id: str,
+    state: PipelineState,
+) -> dict[str, Any] | None:
+    """Run SupervisorAgent cost+compliance check at checkpoint nodes.
+
+    Returns partial state updates (cost_budget, warnings, agent_traces)
+    or None if the node is not a checkpoint.
+    """
+    if node_id not in SUPERVISOR_CHECKPOINT_NODES:
+        return None
+
+    logger.info("supervisor: checkpoint at %s — running cost+compliance check", node_id)
+
+    try:
+        from backend.agents.registry import get_agent, is_registered
+        from backend.agents.base import AgentContext
+
+        if not is_registered("supervisor"):
+            logger.debug("supervisor: SupervisorAgent not registered, skipping checkpoint")
+            return None
+
+        agent = get_agent("supervisor")
+        context = AgentContext(
+            run_id=state.get("run_id", ""),
+            episode_version_id=state.get("episode_version_id", ""),
+            node_id=node_id,
+            project_id=state.get("project_id", ""),
+            genre=None,
+            cost_budget_remaining=None,
+            extra={
+                "total_cost_cny": state.get("total_cost_cny", 0.0),
+                "total_gpu_seconds": state.get("total_gpu_seconds", 0.0),
+                "completed_nodes": state.get("completed_nodes", []),
+            },
+        )
+
+        result = agent.execute(context)
+
+        updates: dict[str, Any] = {}
+        if result.output:
+            cost_budget = result.output.get("budget_status", {})
+            if cost_budget:
+                updates["cost_budget"] = cost_budget
+
+            health = result.output.get("overall_health", "ok")
+            if health == "critical":
+                warnings = list(state.get("warnings", []))
+                warnings.append(
+                    f"Supervisor CRITICAL at {node_id}: "
+                    f"budget utilization {result.output.get('utilization_pct', '?')}%"
+                )
+                updates["warnings"] = warnings
+
+        if result.traces:
+            traces = list(state.get("agent_traces", []))
+            traces.extend(result.traces)
+            updates["agent_traces"] = traces
+
+        logger.info(
+            "supervisor: checkpoint %s — health=%s, cost=%.2f CNY",
+            node_id,
+            result.output.get("overall_health", "unknown") if result.output else "unknown",
+            result.cost_cny or 0,
+        )
+        return updates if updates else None
+
+    except Exception as exc:
+        logger.warning(
+            "supervisor: checkpoint %s failed (non-fatal): %s", node_id, exc
+        )
+        return None
 
 
 def _terminate(reason: str, *, return_ticket_id: str | None = None) -> dict[str, Any]:

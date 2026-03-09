@@ -50,6 +50,140 @@ from .topology import (
 
 logger = logging.getLogger(__name__)
 
+# ── Three-layer decision routing (v2.2 §2.5) ────────────────────────
+# Maps each node to the decision layer its Agent should run in.
+# This is the SOLE authority for setting context.mode.
+
+try:
+    from backend.agents.base import DecisionMode
+except ImportError:
+    DecisionMode = str  # type: ignore[assignment,misc]
+
+NODE_DECISION_LAYER: dict[str, "DecisionMode"] = {
+    # ── Layer 1: Episode-level planning (plan_episode) ──
+    "N01": "plan",     # ScriptAnalyst: script parsing
+    "N02": "plan",     # ShotDesigner: episode shot breakdown
+    "N06": "plan",     # VisualDirector: episode visual strategy
+    "N07b": "plan",    # AudioDirector: voice scheme
+
+    # ── Layer 2: Shot-level execution (execute_shot) ──
+    "N04": "shot",     # ShotDesigner: per-shot params
+    "N05": "shot",     # ShotDesigner: shot refinement
+    "N07": "shot",     # VisualDirector: art generation
+    "N09": "shot",     # VisualDirector: keyframe optimization
+    "N10": "shot",     # VisualDirector: keyframe generation
+    "N13": "shot",     # VisualDirector: video preprocessing
+    "N14": "shot",     # VisualDirector: video generation
+    "N16b": "shot",    # ShotDesigner: tone/pacing adjustment
+    "N17": "shot",     # VisualDirector: video postprocessing
+    "N19": "shot",     # VisualDirector: subtitle compositing
+    "N20": "shot",     # AudioDirector: BGM/SFX generation
+    "N22": "shot",     # AudioDirector: audio mixing
+    "N23": "shot",     # Compositor: AV compositing
+    "N25": "shot",     # Compositor: intro/outro
+    "N26": "shot",     # Compositor: final output
+
+    # ── Layer 3: Batch review (review_batch) ──
+    "N03": "review",   # QualityInspector: storyboard QC
+    "N11": "review",   # QualityInspector: keyframe QC
+    "N12": "review",   # QualityInspector: visual continuity
+    "N15": "review",   # QualityInspector: video QC
+    "N16": "review",   # ShotDesigner: continuity review
+
+    # ── Legacy (Gates — not three-layer) ──
+    "N08": "legacy",   # ReviewDispatcher: Gate
+    "N18": "legacy",   # ReviewDispatcher: Gate
+    "N21": "legacy",   # ReviewDispatcher: Gate
+    "N24": "legacy",   # ReviewDispatcher: Gate
+}
+
+# ── Agent bridge (v2.2) ──────────────────────────────────────────────
+# When no handler is registered for a node but the Agent registry has an
+# agent matching NODE_AGENT_ROLE[node_id], the worker delegates to the
+# agent's execute() method and converts AgentResult → NodeResult.
+
+_AGENT_BRIDGE_ENABLED = True  # set False to disable agent delegation
+
+
+def _try_agent_bridge(node_id: str, state: PipelineState, config: dict[str, Any]) -> NodeResult | None:
+    """Attempt to execute via the v2.2 Agent registry.
+
+    Returns NodeResult on success, None if no suitable agent is registered
+    or if the bridge is disabled.
+    """
+    if not _AGENT_BRIDGE_ENABLED:
+        return None
+
+    agent_role = NODE_AGENT_ROLE.get(node_id)
+    if not agent_role:
+        return None
+
+    try:
+        from backend.agents.registry import get_agent, is_registered
+        from backend.agents.base import AgentContext
+    except ImportError:
+        return None
+
+    if not is_registered(agent_role):
+        return None
+
+    try:
+        agent = get_agent(agent_role)
+    except KeyError:
+        return None
+
+    # Build AgentContext from PipelineState
+    decision_mode = NODE_DECISION_LAYER.get(node_id, "legacy")
+    context = AgentContext(
+        run_id=state.get("run_id", ""),
+        episode_version_id=state.get("episode_version_id", ""),
+        node_id=node_id,
+        project_id=state.get("project_id", ""),
+        genre=None,
+        mode=decision_mode,
+        cost_budget_remaining=None,
+        extra={
+            "input_envelope": config.get("input_envelope", {}),
+            "upstream_outputs": config.get("upstream_outputs", {}),
+            "stage_group": config.get("stage_group", ""),
+            "total_cost_cny": state.get("total_cost_cny", 0.0),
+            "total_gpu_seconds": state.get("total_gpu_seconds", 0.0),
+        },
+    )
+
+    t0 = time.monotonic()
+    try:
+        agent_result = agent.execute(context)
+    except Exception as exc:
+        logger.warning("agent bridge %s/%s failed: %s", node_id, agent_role, exc)
+        return None
+
+    duration_s = time.monotonic() - t0
+
+    # Convert AgentResult → NodeResult
+    ev_id = state.get("episode_version_id") or "unknown"
+    output_ref = f"agent://{ev_id}/{node_id}/output.json"
+
+    # Merge agent traces into state
+    agent_traces = list(state.get("agent_traces", []))
+    agent_traces.extend(agent_result.traces)
+
+    return NodeResult(
+        node_id=node_id,
+        status="succeeded" if agent_result.success else "failed",
+        output_ref=output_ref,
+        artifact_ids=[],
+        cost_cny=agent_result.cost_cny,
+        gpu_seconds=0.0,
+        duration_s=duration_s,
+        error=agent_result.error,
+        error_code="AGENT_ERROR" if agent_result.error else None,
+        model_provider=agent_role,
+        model_endpoint=f"agent:{agent_role}",
+        output_payload=agent_result.output,
+        _agent_traces=agent_traces,
+    )
+
 
 class NodeHandler(Protocol):
     """Interface every real node implementation must satisfy."""
@@ -133,8 +267,6 @@ def make_worker_node(node_id: str) -> Callable[[PipelineState], dict[str, Any]]:
     """
 
     def _node(state: PipelineState) -> dict[str, Any]:
-        handler = _handlers.get(node_id, _qc_stub_handler if node_id in QC_NODES else _stub_handler)
-
         config: dict[str, Any] = {
             "node_id": node_id,
             "agent_role": NODE_AGENT_ROLE.get(node_id, "unknown"),
@@ -142,6 +274,54 @@ def make_worker_node(node_id: str) -> Callable[[PipelineState], dict[str, Any]]:
             "upstream_outputs": _collect_upstream_outputs(node_id, state),
             "input_envelope": build_node_input_envelope(node_id, state),
         }
+
+        # Resolution order: registered handler → agent bridge → stub
+        handler = _handlers.get(node_id)
+        if handler is None:
+            agent_result = _try_agent_bridge(node_id, state, config)
+            if agent_result is not None:
+                # Propagate agent traces to state update
+                result = agent_result
+                _cache_output_payload(result)
+                result = _persist_execution_result(node_id, state, config, result)
+
+                cost = result.get("cost_cny", 0.0)
+                gpu = result.get("gpu_seconds", 0.0)
+                output_ref = result.get("output_ref")
+
+                node_outputs = dict(state.get("node_outputs", {}))
+                if output_ref:
+                    node_outputs[node_id] = NodeOutputRef(
+                        output_ref=output_ref,
+                        node_run_id=result.get("node_run_id"),
+                        scope=output_scope(node_id),
+                    )
+
+                update: dict[str, Any] = {
+                    "last_result": result,
+                    "current_node_id": node_id,
+                    "node_outputs": node_outputs,
+                    "total_cost_cny": state.get("total_cost_cny", 0.0) + cost,
+                    "total_gpu_seconds": state.get("total_gpu_seconds", 0.0) + gpu,
+                }
+                # Propagate agent traces
+                traces = result.get("_agent_traces")
+                if traces:
+                    update["agent_traces"] = traces
+
+                if node_id == "N01" and output_ref:
+                    update["episode_context_ref"] = output_ref
+
+                score = result.get("quality_score")
+                if score is not None and node_id in QC_NODES:
+                    qc_scores = dict(state.get("qc_scores", {}))
+                    qc_scores[node_id] = score
+                    update["qc_scores"] = qc_scores
+
+                return update
+
+            # No handler, no agent — use stub
+            handler = _qc_stub_handler if node_id in QC_NODES else _stub_handler
 
         t0 = time.monotonic()
         try:

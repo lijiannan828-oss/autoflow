@@ -5,8 +5,8 @@
 | 项 | 值 |
 |---|---|
 | Spec 名称 | aigc-core-orchestrator-platform |
-| 文档版本 | v2.0（对齐实际管线选型） |
-| 产品范围 | 自研：26 执行节点编排（LangGraph + Multi-Agent）、回炉归因、数据中心、绩效、大盘、调试、网关 |
+| 文档版本 | v2.2（对齐 Pipeline v2.2 多智能体架构） |
+| 产品范围 | 自研：28 执行节点编排（LangGraph + Multi-Agent，含 N07b/N16b）、回炉归因、数据中心、绩效、大盘、调试、网关 |
 | 非范围 | 员工端 4 审核页实现（外包），但自研需提供 Review Gateway DTO/API |
 | 核心目标 | 90% 自动化，人只做审核；系统可自动归因并最小重跑 |
 
@@ -59,9 +59,12 @@
 
 ### 2.1 自研范围（In Scope）
 
-1. **Orchestrator（LangGraph + Multi-Agent）**：Supervisor Agent 中央调度 + 6 类 Worker Agent + 26 节点编排。
+1. **Orchestrator（LangGraph + Multi-Agent）**：Supervisor（横切守卫，合并原 Cost Controller + PM Agent）中央调度 + 7 生产 Agent + 1 Evolution Engine + 28 节点编排（含 N07b、N16b）。
 2. **RCA + Retry**：ReturnTicket、归因规则、最小重跑计划、自动重跑。
-3. **RAG 知识库**：Chroma 向量库 + 知识检索服务，为各 Agent 提供上下文（导演参考、历史案例、风格基线等）。
+3. **RAG 知识库**：**Qdrant** 向量库（替代 Chroma）+ 链路级 RAG 知识检索服务，为各 Agent 提供上下文（导演参考、历史案例、风格基线等）。
+3b. **Agent 记忆系统**：三层记忆（工作记忆 → LangGraph State；项目记忆 → PostgreSQL `agent_memory` 表；长期记忆 → RAG Qdrant + Prompt 资产库）。
+3c. **Prompt 资产库**：三层 Prompt 架构（母版 Master Template → 题材适配器 Genre Adapter → 实例适配层 Instance Adapter），支持版本管理与 A/B 测试。
+3d. **项目集管理**：`ProjectGroup`（发行平台约束）+ `ProjectRequirements`（项目特殊需求），Supervisor 在关键 checkpoint 校验合规与成本。
 4. **ComfyUI 生成集群**：4-8 卡 GPU，模型路由器，图像/视频生成引擎。
 5. **Reflection / Feedback Learning**：人类反馈结构化沉淀、好坏案例入库、规则/提示词/工作流回写。
 6. **Quality Evaluation**：角色一致性、连贯性、音画同步、最终片综合质量评分体系。
@@ -72,7 +75,7 @@
 11. **Ops / Production Board**：全局生产大盘与剧级抽屉。
 12. **Node Trace & Runbook**：节点级调试与可观测。
 13. **Review Gateway**：脱敏网关，向外包员工端/合作方端暴露 DTO 与接口。
-14. **OpenClaw**：人类审核入口（聊天界面 + Web 时间轴 + 最小干预交互）。
+14. **OpenClaw**：人类审核入口与审核任务管理（聊天界面 + Web 时间轴 + 最小干预交互）。
 
 ### 2.2 非范围（Out of Scope）
 
@@ -88,24 +91,46 @@
 
 ## 3. 多智能体架构要求
 
-### 3.1 Agent 角色定义
+### 3.1 Agent 角色定义（v2.2 — 10 Agent + 1 框架）
 
-| Agent 角色 | 职责 | 主导节点 |
-|---|---|---|
-| **Supervisor Agent** | 中央大脑，LangGraph Orchestrator，调度所有 Worker Agent | 全局编排 |
-| **Script Analyst Agent** | 剧本分析、要素提取 | N01 |
-| **Director Agent** | 拆集拆镜、分镜定稿、镜头分级、成片整合、定稿、推送 | N02/N04/N05/N23/N25/N26 |
-| **Quality Guardian Agent** | 多模型质检、评分、自动打回判定 | N03/N11/N15 |
-| **Visual Director Agent** | 视觉元素生成、美术/关键帧/视频生成与定稿 | N06/N07/N09/N10/N13/N14/N17 |
-| **Storyboard Planner Agent** | 剧情连续性检查、节奏分析 | N12/N16 |
-| **Audio Director Agent** | 视听整合、音频定稿 | N20/N22 |
+> **精简原则（v2.2）**：消除悬空 Agent、合并串行进化链路（4→1）、统一横切守卫（Cost Controller + PM Agent → Supervisor）。Orchestrator（LangGraph）降级为框架，不调 LLM、不做决策。
+
+#### 3.1.1 生产线 Agent（7 个）
+
+| # | Agent 角色 | 职责 | 主导节点 |
+|---|---|---|---|
+| 1 | **Script Analyst** | 剧本理解、结构化提取、分集骨架 | N01 |
+| 2 | **Shot Designer** | 拆集拆镜、分镜定稿、镜头分级、节奏分析与调整 | N02/N04/N05/N16/N16b |
+| 3 | **Visual Director** | 视觉策划 + prompt 工程 + 关键帧/视频生成全链路 | N06/N07/N09/N10/N13/N14/N17/N19 |
+| 4 | **Audio Director** | 美术阶段：核心角色音色生成；定稿后：TTS/唇同步/BGM/SFX | N07b/N20/N22 |
+| 5 | **Quality Inspector** | 多模型交叉评审、连续性分析、自动打回判定 | N03/N11/N12/N15 |
+| 6 | **Compositor** | 时间轴编排、多轨混音、成片合成、分发 | N16b(协作)/N23/N25/N26 |
+| 7 | **Review Dispatcher** | 解析人类审核批注，拆分为可执行任务并调度 | N08/N18/N21/N24 |
+
+#### 3.1.2 监督 Agent（1 个）— 横切守卫
+
+| # | Agent 角色 | 职责 | 介入方式 |
+|---|---|---|---|
+| 8 | **Supervisor** | 成本监控 + 项目需求校验 + 预算分配 + 降级触发 + 合规检查（合并原 Cost Controller + PM Agent） | 横切：每个关键 checkpoint 自动触发（N02/N05/N09/N14/N17/N23） |
+
+#### 3.1.3 进化 Agent（1 个）— 自我进化全链路
+
+| # | Agent 角色 | 职责 | 运行模式 |
+|---|---|---|---|
+| 9 | **Evolution Engine** | 反思分析 → prompt 进化 → A/B 测试 → RAG 管理 → LoRA 训练（合并原 Reflection + Prompt Evolver + RAG Curator + Style Trainer 四合一） | 每日反思 / 每周进化 / 持续入库 / 按条件训练 |
+
+#### 3.1.4 框架（不计入 Agent）
+
+| 组件 | 职责 |
+|---|---|
+| **LangGraph Orchestrator** | 状态机调度，纯代码逻辑，不调 LLM，不做决策 |
 
 ### 3.2 编排框架
 
 - 采用 **LangGraph** 作为多智能体编排框架（替代纯 Celery DAG）。
 - Supervisor Agent 负责任务分发、状态追踪、Gate 挂起/放行、异常处理。
 - Worker Agent 接收任务后调用对应模型/工具，返回结构化结果。
-- Celery + **Redis（已部署，作为 broker）** 用于异步任务队列（模型回调、重跑触发等）。MVP-1 可按需迁移至 RabbitMQ。
+- **RocketMQ**（火山引擎托管版）用于异步任务调度（模型回调、重跑触发、Agent 间通信）。所有 Agent 通过 RocketMQ 异步通信。
 
 ### 3.3 知识库/RAG 要求
 
@@ -122,6 +147,35 @@
 | N12 连续性检查 | 主剧情上下文联连解读 |
 | N14 视频生成 | 动感性映射规则 |
 | N16 节奏连续性 | 节奏解码 + 方案参考 |
+
+### 3.4 Agent 即时决策机制（v2.2 新增）
+
+每个 Agent 接到任务时经历五步微型决策循环：
+1. **理解上下文** — 读取 ShotSpec/场景/角色 + 项目集约束 + 叙事位置
+2. **检索经验** — RAG 召回同类成功案例 + 读取 Agent 记忆（同角色/同场景历史处理经验）
+3. **选择策略** — 选 prompt 模板、题材适配器、候选数量、模型切换、成本预算
+4. **执行+自检** — 执行生成/分析 → 对输出做 self-check（格式、一致性、上下游衔接）
+5. **记录+沉淀** — 完整决策 trace → 高分结果沉淀为记忆
+
+### 3.5 Agent 记忆机制（v2.2 新增）
+
+| 记忆层 | 存储位置 | 生命周期 | 用途 |
+|---|---|---|---|
+| **工作记忆** | LangGraph State | 单次任务执行期间 | 当前镜头上下文、中间计算结果 |
+| **项目记忆** | PostgreSQL `agent_memory` 表 | 项目周期 | "太后角色 ip_adapter 最佳值 0.78"、"本剧夜景需加暖光约束" |
+| **长期记忆** | RAG Qdrant + Prompt 资产库 | 永久（跨项目） | 全链路成功案例、prompt 版本历史、风格模式 |
+
+### 3.6 Supervisor 横切守卫 checkpoint（v2.2 新增）
+
+Supervisor 在以下关键 checkpoint 同时校验成本和项目需求：
+
+| 检查点 | 成本校验 | 项目需求校验 |
+|---|---|---|
+| N02 完成后 | 镜头数→估算总成本 | 时长在平台约束范围内？节奏符合偏好？ |
+| N05 完成后 | S2 占比→成本风险评估 | 是否有违反合规红线的内容描述？ |
+| N09 完成后 | 美术候选数→成本 | 画风是否符合平台调性？品牌色匹配？ |
+| N14/N17 | 实时累计成本 vs 预算 | 分辨率/画幅/编码/时长符合硬约束？ |
+| N23 完成后 | 单集总成本结算 | 所有 platform_constraints 满足？水印/disclaimer 正确？ |
 
 ---
 
@@ -190,22 +244,24 @@ PENDING → RUNNING → SUCCEEDED | FAILED | CANCELED | SKIPPED
 | `estimated_duration_s` | int | 预估执行时长 |
 | `comfyui_nodes` | jsonb | 使用的 ComfyUI 节点列表 |
 
-### 5.2 节点清单（V2 完整 26 节点 — 对齐选型表）
+### 5.2 节点清单（V2.2 完整 28 节点 — 含 N07b、N16b）
+
+> v2.2 模型策略对齐：v1 阶段以闭源模型为主力（Gemini/Claude/GPT）；自部署开源模型仅作为兜底或后续替换路径，不作为当前主力口径。
 
 #### SCRIPT（剧本阶段）
 
 | # | ID | 名称 | Agent | 模型/工具 | 质检阈值 | 预估时间 |
 |---|---|---|---|---|---|---|
-| 1 | N01_SCRIPT_EXTRACT | 主剧本提取 | Script Analyst Agent | Qwen3-72B / DeepSeek-R1 | 完整性 >95% | ~3 min |
-| 2 | N02_EPISODE_SHOT_SPLIT | LLM拆集拆镜 | Director Agent | Qwen3-72B / Llama-3.3-70B | JSON格式100%正确 | ~4 min |
+| 1 | N01_SCRIPT_EXTRACT | 主剧本提取 | Script Analyst Agent | Gemini 3.1（主）/ Claude Opus 4.6（备） | 完整性 >95% | ~3 min |
+| 2 | N02_EPISODE_SHOT_SPLIT | LLM拆集拆镜 | Shot Designer Agent | Gemini 3.1（主）/ Claude Opus 4.6（备） | JSON格式100%正确 | ~4 min |
 
 #### STORYBOARD（分镜阶段）
 
 | # | ID | 名称 | Agent | 模型/工具 | 质检阈值 | 预估时间 |
 |---|---|---|---|---|---|---|
-| 3 | N03_STORYBOARD_QC | 分镜质量检验 | Quality Guardian Agent | GPT 5.4 + Gemini 3.1 + Claude（多模型） | <8.0 自动打回 N02 | ~4 min |
-| 4 | N04_STORYBOARD_FREEZE | 分镜定稿 | Director Agent | Qwen3-72B | 100%满足 N03 标准 | — |
-| 5 | N05_SHOT_LEVELING | 镜头分级&编号标注 | Director Agent | Qwen3-72B | — | — |
+| 3 | N03_STORYBOARD_QC | 分镜质量检验 | Quality Inspector Agent | GPT 5.4 + Gemini 3.1 + Claude（多模型） | <8.0 自动打回 N02 | ~4 min |
+| 4 | N04_STORYBOARD_FREEZE | 分镜定稿 | Shot Designer Agent | Gemini 3.1（主）/ Claude Opus 4.6（备） | 100%满足 N03 标准 | — |
+| 5 | N05_SHOT_LEVELING | 镜头分级&编号标注 | Shot Designer Agent | Gemini 3.1（主）/ Claude Opus 4.6（备） | — | — |
 
 #### VISUAL ELEMENT & ART（视觉元素与美术阶段）
 
@@ -213,7 +269,8 @@ PENDING → RUNNING → SUCCEEDED | FAILED | CANCELED | SKIPPED
 |---|---|---|---|---|---|---|---|
 | 6 | N06_VISUAL_ELEMENT_GEN | 视觉元素生成 | Visual Director Agent | Qwen3-72B | Text Concat / Prompt Builder | **不产出图，仅输出 Prompt + ComfyUI 工作流 JSON** | — |
 | 7 | N07_ART_ASSET_GEN | 美术产品图生成 | Visual Director Agent | FLUX.2 Dev / Z-Image-Turbo + FireRed-1.1 | I-image, Turbo, FireRed MultiRef + 全面资源 | 风格一致性 | ~25 min |
-| 8 | N08_ART_HUMAN_GATE | 美术产品人类检确 | **Gate: Stage1 — 仅剪辑中台审核（资产级）** | — | Image Preview | 人工确认 | +人工时间 |
+| 7b | N07b_VOICE_GEN | 核心角色音色生成 | Audio Director Agent | CosyVoice / ElevenLabs | — | — | ~10 min |
+| 8 | N08_ART_HUMAN_GATE | 美术产品人类检确 | **Gate: Stage1 — 仅剪辑中台审核（资产级 + 音色选定）** | — | Image Preview + Voice Preview | 人工确认 | +人工时间 |
 | 9 | N09_ART_FREEZE | 美术产品定稿 | Visual Director Agent | FireRed-1.1 | FireRed + BatchRun | — | — |
 
 #### KEYFRAME（关键帧阶段）
@@ -231,8 +288,9 @@ PENDING → RUNNING → SUCCEEDED | FAILED | CANCELED | SKIPPED
 |---|---|---|---|---|---|---|---|
 | 14 | N14_VIDEO_GEN | 视频素材生成 | Visual Director Agent | LTX-2.3 / Wan2.2 / SkyReels / ViVi+Mochi | LTXVividGuide Multi, HuMo+Embeds, 模型路由 | 1080p 评估 | ~80 min |
 | 15 | N15_VIDEO_QC | 视频素材质检 | Quality Guardian Agent | 多模型（Gemini等） | ReActor + Physics Checker | 多维度打分 | ~20 min |
-| 16 | N16_VIDEO_CONTINUITY_PACE | 剧情&节奏连续性 | Storyboard Planner Agent | Qwen3-72B | — | — | ~15 min |
-| 17 | N17_VIDEO_FREEZE | 视频素材定稿 | Visual Director Agent | — | — | — | ~10 min |
+| 16 | N16_VIDEO_CONTINUITY_PACE | 剧情&节奏连续性 | Shot Designer Agent | Gemini 3.1 | — | — | ~15 min |
+| 16b | N16b_TONE_RHYTHM_ADJUST | 影调与节奏调整 | Shot Designer + Compositor（协作） | FFmpeg（剪辑）+ Gemini 3.1（决策） | — | — | ~10 min |
+| 17 | N17_VIDEO_FREEZE | 视频素材定稿 | Visual Director Agent | RealESRGAN/Topaz(超分) + FFmpeg | — | — | ~10 min |
 | 18 | N18_VISUAL_HUMAN_GATE | 视觉素材人类检确 | **Gate: Stage2 — 仅质检员审核（分镜/shot级）** | — | Timeline Preview | 人工确认 | ~10 min |
 | 19 | N19_VISUAL_FREEZE | 视觉素材定稿 | — | — | — | — | — |
 
@@ -248,10 +306,10 @@ PENDING → RUNNING → SUCCEEDED | FAILED | CANCELED | SKIPPED
 
 | # | ID | 名称 | Agent | 模型/工具 | ComfyUI 节点 | 质检阈值 | 预估时间 |
 |---|---|---|---|---|---|---|---|
-| 23 | N23_FINAL_COMPOSE | 成片整合 | Director Agent | — | VHS_VideoCombine | — | ~15 min |
+| 23 | N23_FINAL_COMPOSE | 成片整合 | Compositor Agent | FFmpeg（主）+ VHS_VideoCombine（辅） | VHS_VideoCombine | — | ~15 min |
 | 24 | N24_FINAL_HUMAN_GATE | 成片人类检确查 | **Gate: Stage4 — 串行3步：质检员(可选)→剪辑中台→合作方（集/episode级）** | — | Video Player + Timeline | 3角色均通过 | ~15 min×3 |
-| 25 | N25_FINAL_FREEZE | 成片定稿 | Director Agent | — | — | — | ~5 min |
-| 26 | N26_DISTRIBUTION | TikTok/飞书推送 | Director Agent | — | Feishu + TikTok | — | — |
+| 25 | N25_FINAL_FREEZE | 成片定稿 | Compositor Agent | — | — | — | ~5 min |
+| 26 | N26_DISTRIBUTION | TikTok/飞书推送 | Compositor Agent | — | Feishu + TikTok | — | — |
 
 ### 5.3 回溯链（打回路径映射）
 
@@ -275,10 +333,10 @@ PENDING → RUNNING → SUCCEEDED | FAILED | CANCELED | SKIPPED
 ```text
 1. 创建 EpisodeVersion v1
 2. Supervisor Agent 按 Node Registry 依赖拓扑调度 Worker Agent
-3. N01(Script Analyst) → N02(Director) → N03(Quality Guardian) → N04 → N05
-4. N06(Visual Director) → N07 → N08(Gate Stage1: 剪辑中台审核，资产级) → N09
-5. N10 → N11(Quality Guardian) → N12(Storyboard Planner) → N13
-6. N14 → N15(Quality Guardian) → N16(Storyboard Planner) → N17 → N18(Gate Stage2: 质检员审核，shot级) → N19
+3. N01(Script Analyst) → N02(Shot Designer) → N03(Quality Inspector) → N04 → N05
+4. N06(Visual Director) → N07 ∥ N07b(Audio Director, 并行) → N08(Gate Stage1: 剪辑中台审核，资产级 + 音色选定) → N09
+5. N10 → N11(Quality Inspector) → N12(Quality Inspector) → N13
+6. N14 → N15(Quality Inspector) → N16(Shot Designer) → N16b(影调节奏调整) → N17 → N18(Gate Stage2: 质检员审核，shot级) → N19
 7. N20(Audio Director) → N21(Gate Stage3: 质检员审核，episode级) → N22
 8. N23 → N24(Gate Stage4: 质检员→剪辑中台→合作方 串行3步，episode级) → N25 → N26(推送)
 ```
@@ -350,7 +408,7 @@ Stage4 为串行 3 步审核，打回可能发生在任一步骤：
 ### 7.2 RAG 知识库
 
 - **US-K1**
-  **WHEN** Worker Agent 开始执行 **THE SYSTEM SHALL** 从 Chroma 检索对应的知识上下文（导演参考、风格基线、历史案例）作为 prompt 输入。
+  **WHEN** Worker Agent 开始执行 **THE SYSTEM SHALL** 从 Qdrant 检索对应的知识上下文（导演参考、风格基线、历史案例）作为 prompt 输入。
 
 ### 7.3 回炉归因与最小重跑
 
@@ -477,7 +535,7 @@ Stage4 为串行 3 步审核，打回可能发生在任一步骤：
 
 ## 10. 验收标准（DoD）
 
-1. 能跑通 N01→N26 全链路（含 4 Gate + TikTok 推送）。
+1. 能跑通 N01→N26 全链路（含 N07b、N16b 共 28 节点 + 4 Gate + TikTok 推送）。
 2. 任意打回可自动生成 ReturnTicket + rerun plan + 新版本。
 3. 质检节点（N03/N11/N15）低于阈值可自动打回。
 4. Data Center 能计算并展示北极星指标。

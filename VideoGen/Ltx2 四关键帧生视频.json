@@ -5511,9 +5511,9 @@
         "models": [
           {
             "directory_invalid": true,
-            "name": "ltx-2-spatial-upscaler-x2-1.0.safetensors",
+            "name": "ltx-2.3-spatial-upscaler-x2-1.0.safetensors",
             "directory": "latent_upscale_models",
-            "url": "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-spatial-upscaler-x2-1.0.safetensors"
+            "url": "https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
           }
         ],
         "ver": "0.7.0",
@@ -5531,7 +5531,7 @@
         "tabXOffset": 10
       },
       "widgets_values": [
-        "ltx-2-spatial-upscaler-x2-1.0.safetensors"
+        "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
       ],
       "color": "#223",
       "bgcolor": "#335"
@@ -6874,7 +6874,7 @@
         "collapsed": false
       },
       "order": 62,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "label": "model",
@@ -6915,9 +6915,9 @@
         "hasSecondTab": false,
         "models": [
           {
-            "name": "ltx-2-19b-distilled-lora-384.safetensors",
+            "name": "ltx-2.3-22b-distilled-lora-384.safetensors",
             "directory": "loras",
-            "url": "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors"
+            "url": "https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-lora-384.safetensors"
           }
         ],
         "ver": "0.3.75",
@@ -6956,7 +6956,7 @@
         "collapsed": false
       },
       "order": 74,
-      "mode": 0,
+      "mode": 4,
       "inputs": [
         {
           "label": "model",
@@ -6997,9 +6997,9 @@
         "hasSecondTab": false,
         "models": [
           {
-            "name": "ltx-2-19b-distilled-lora-384.safetensors",
+            "name": "ltx-2.3-22b-distilled-lora-384.safetensors",
             "directory": "loras",
-            "url": "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors"
+            "url": "https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-lora-384.safetensors"
           }
         ],
         "ver": "0.3.75",
@@ -7960,9 +7960,9 @@
         "models": [
           {
             "directory_invalid": true,
-            "name": "ltx-2-19b-distilled-lora-384.safetensors",
+            "name": "ltx-2.3-22b-distilled-lora-384.safetensors",
             "directory": "loras",
-            "url": "https://huggingface.co/Lightricks/LTX-2/resolve/main/ltx-2-19b-distilled-lora-384.safetensors"
+            "url": "https://huggingface.co/Lightricks/LTX-2.3/resolve/main/ltx-2.3-22b-distilled-lora-384.safetensors"
           }
         ],
         "ver": "0.3.75",
@@ -7980,7 +7980,7 @@
         "tabXOffset": 10
       },
       "widgets_values": [
-        "ltx-2-19b-distilled-lora_resized_dynamic_fro09_avg_rank_175_bf16.safetensors",
+        "ltx-2.3-22b-distilled-lora-resized_dynamic_rank_208.safetensors",
         0.5500000000000002
       ],
       "color": "#223",
@@ -8233,7 +8233,7 @@
       },
       "widgets_values": [
         "gemma_3_12B_it_fp8_e4m3fn.safetensors",
-        "ltx-2-19b-dev-fp8.safetensors",
+        "ltx-2.3-22b-dev.safetensors",
         "default"
       ]
     },
@@ -8292,7 +8292,7 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": [
-        "ltx-2-19b-dev-fp8.safetensors"
+        "ltx-2.3-22b-dev.safetensors"
       ]
     },
     {
@@ -8334,7 +8334,7 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": [
-        "ltx-2-19b-dev-fp8.safetensors"
+        "ltx-2.3-22b-dev.safetensors"
       ]
     },
     {
@@ -8389,7 +8389,7 @@
         "widget_ue_connectable": {}
       },
       "widgets_values": [
-        "ltx-2-19b-dev-fp8_transformer_only.safetensors",
+        "ltx-2.3-22b-dev_transformer_only.safetensors",
         "default"
       ],
       "color": "#223",
@@ -8660,7 +8660,7 @@
       },
       "widgets_values": [
         "gemma_3_12B_it_fp8_e4m3fn.safetensors",
-        "ltx-2-19b-embeddings_connector_bf16.safetensors",
+        "ltx-2.3-22b-embeddings_connector_bf16.safetensors",
         "ltxv",
         "default"
       ],
@@ -10377,7 +10377,7 @@
       "1": {
         "class_type": "CheckpointLoaderSimple",
         "inputs": {
-          "ckpt_name": "ltx-av-step-1751000_vocoder_24K.safetensors"
+          "ckpt_name": "ltx-2.3-22b-dev.safetensors"
         },
         "_meta": {
           "title": "Load Checkpoint"
@@ -10386,7 +10386,7 @@
       "2": {
         "class_type": "LTXVGemmaCLIPModelLoader",
         "inputs": {
-          "ltxv_path": "ltx-av-step-1751000_vocoder_24K.safetensors",
+          "ltxv_path": "ltx-2.3-22b-dev.safetensors",
           "gemma_path": "gemma-3-12b-it-qat-q4_0-unquantized_readout_proj/model/model.safetensors",
           "max_length": 1024
         },
@@ -10474,7 +10474,7 @@
       "13": {
         "class_type": "LTXVAudioVAELoader",
         "inputs": {
-          "ckpt_name": "ltx-av-step-1751000_vocoder_24K.safetensors"
+          "ckpt_name": "ltx-2.3-22b-dev.safetensors"
         },
         "_meta": {
           "title": "🅛🅣🅧 LTXV Audio VAE Loader"

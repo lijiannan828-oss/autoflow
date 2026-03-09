@@ -233,6 +233,11 @@ def _enrich_payload_for_gate(
 
     if gate_node_id == "N08":
         upstream = load_node_output_payload("N07", state, default=None)
+        # v2.2: N08 also receives voice candidates from N07b (parallel branch)
+        voice_upstream = load_node_output_payload("N07b", state, default=None)
+        if voice_upstream and isinstance(voice_upstream, dict):
+            base_payload["voice_candidates"] = voice_upstream.get("voice_candidates", [])
+            base_payload["voice_model"] = voice_upstream.get("model", "cosyvoice3")
         return enrich_stage1_payload(base_payload, upstream_output=upstream, episode_ctx=episode_ctx)
 
     if gate_node_id == "N18":
@@ -310,6 +315,11 @@ def _resolve_scope_records(
             seed=f"{episode_version_id}:{gate_node_id}:asset:1",
         )
         upstream_node_run_id = ((state.get("node_outputs") or {}).get("N07") or {}).get("node_run_id")
+        # v2.2: include N07b (voice samples) upstream reference
+        voice_node_run_id = ((state.get("node_outputs") or {}).get("N07b") or {}).get("node_run_id")
+        scope_meta: dict[str, Any] = {}
+        if voice_node_run_id:
+            scope_meta["voice_node_run_id"] = voice_node_run_id
         return [
             {
                 "task_id": uuid5(_RUNTIME_NAMESPACE, f"{episode_version_id}:{gate_node_id}:task:1"),
@@ -317,6 +327,7 @@ def _resolve_scope_records(
                 "anchor_type": "asset",
                 "anchor_id": anchor_id,
                 "upstream_node_run_id": upstream_node_run_id,
+                "scope_meta": scope_meta,
             }
         ]
 

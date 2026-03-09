@@ -3,7 +3,7 @@
 ## 文档信息
 
 - Spec：`aigc-core-orchestrator-platform`
-- 版本：v2.0（对齐实际管线选型）
+- 版本：v2.2（对齐 Pipeline v2.2 多智能体架构）
 - 依赖：`requirements.md`
 
 ---
@@ -14,79 +14,60 @@
 
 ```text
 用户/审核员
-  OpenClaw 聊天界面 + Web 时间轴
+  OpenClaw 聊天界面 + Web 时间轴 + 飞书终端
            │
            ▼
-┌──────────────────────────┐
-│  LangGraph Orchestrator  │
-│  Supervisor Agent 中央大脑│
-└────────────┬─────────────┘
+┌──────────────────────────────┐
+│  Agent Gateway (FastAPI)      │  ← orchestrator Pod
+│  LangGraph Orchestrator       │    含 Supervisor（横切守卫）
+│  + Review Dispatcher Agent    │
+└────────────┬─────────────────┘
              │
              ▼
-┌──────────────────────────┐
-│  Worker Agents 集群       │
-│  Script Analyst           │
-│  Director                 │
-│  Visual Director          │
-│  Quality Guardian         │
-│  Storyboard Planner       │
-│  Audio Director           │
-└─────┬────────────┬───────┘
-      │            │
-      ▼            ▼
-┌───────────┐ ┌──────────────┐
-│ ComfyUI   │ │ 质检闭环      │
-│ 生成集群   │ │ 多模型+自动   │
-│ 4-8卡     │ │ 打回          │
-│ 4090/A100 │ └──────┬───────┘
-│ 模型路由器 │        │
-└─────┬─────┘        ▼
-      │        ┌──────────────┐
-      ▼        │ 人类审核入口  │
-┌───────────┐  │ OpenClaw +   │
-│ 存储层     │  │ 时间轴       │
-│ MinIO/TOS │  │ 最小干预      │
-│ Chroma RAG│  └──────┬───────┘
-│ Redis 状态│         │
-└───────────┘         ▼
-              ┌──────────────┐
-              │ 视听整合      │
-              │ LatentSync +  │
-              │ Stable Audio +│
-              │ AudioMixer    │
-              └──────┬───────┘
-                     ▼
-              ┌──────────────┐
-              │ 最终成片 +    │
-              │ TikTok/Feishu│
-              │ 推送          │
-              └──────────────┘
+┌──────────────────────────────┐
+│      RocketMQ 任务队列        │  ← 替代 Celery+Redis
+└──┬────────┬─────────┬────┬───┘
+   │        │         │    │
+┌──▼──────┐ │    ┌────▼──┐ │
+│闭源 API │ │    │ComfyUI│ │
+│Gemini   │ │    │GPU集群│ │
+│Claude   │ │    │A800×8 │ │
+│GPT 5.4  │ │    │4090D×8│ │
+└─────────┘ │    └───────┘ │
+       ┌────▼────┐    ┌───▼──────┐
+       │生产Agent│    │存储层     │
+       │7个+EvoE │    │TOS       │
+       │(llm-    │    │Qdrant RAG│
+       │ agents) │    │PG+Redis  │
+       └─────────┘    └──────────┘
 ```
 
 ### 1.2 组件职责
 
 | 组件 | 职责 |
 |---|---|
-| **LangGraph Orchestrator / Supervisor Agent** | 中央大脑，多智能体调度，DAG 状态推进，Gate 挂起/放行 |
-| **Worker Agents（6类）** | 接收 Supervisor 分发的任务，调用模型/工具，返回结构化结果 |
-| **ComfyUI 生成集群** | 4-8 卡 GPU（4090/A100），模型路由器，图像/视频生成引擎 |
-| **质检闭环** | 多模型投票打分 + 自动打回判定 |
-| **RAG 知识库（Chroma）** | 向量检索：导演参考、历史案例、风格基线、评审规则 |
-| **OpenClaw** | 人类审核入口：聊天界面 + Web 时间轴 + 最小干预交互 |
+| **LangGraph Orchestrator** | 状态机调度框架，纯代码逻辑，不调 LLM，不做决策 |
+| **Supervisor Agent（横切守卫）** | 成本监控 + 项目需求校验 + 预算分配 + 降级触发 + 合规检查；在 N02/N05/N09/N14/N17/N23 checkpoint 自动触发 |
+| **生产 Agents（7 个）** | Script Analyst / Shot Designer / Visual Director / Audio Director / Quality Inspector / Compositor / Review Dispatcher |
+| **Evolution Engine** | 自我进化全链路：每日反思 → 每周 prompt 进化 → 持续 RAG 入库 → 按条件 LoRA 训练 |
+| **ComfyUI 生成集群** | A800×8 + 4090D×8（16 卡），模型路由器，图像/视频/音频生成引擎 |
+| **质检闭环** | 多模型投票打分 + 自动打回判定（Quality Inspector Agent） |
+| **RAG 知识库（Qdrant）** | 链路级向量检索：导演参考、历史案例、风格基线、评审规则 |
+| **OpenClaw** | 人类审核入口与审核任务管理：聊天界面 + Web 时间轴 + 最小干预交互 |
 | **RCA Planner** | 基于规则输出 root cause 与 minimal rerun plan |
 | **Analytics** | 汇总成本/效率/质量指标 |
 | **Review Gateway** | 向外包/合作方暴露脱敏接口与 DTO |
-| **存储层** | MinIO/TOS（素材）+ Chroma（RAG）+ Redis（状态/锁）+ PostgreSQL（事务） |
+| **存储层** | MinIO/TOS（素材）+ Qdrant（RAG）+ Redis（状态/锁）+ PostgreSQL（事务） |
 
 ### 1.3 技术栈
 
 | 层级 | 选型 |
 |---|---|
 | 多智能体编排 | **LangGraph**（Supervisor + Worker 模式） |
-| 异步任务队列 | Celery + **Redis（已部署）** 作为 broker（MVP-0）；如需 DLQ/消息优先级可迁移至 RabbitMQ |
+| 异步任务队列 | **RocketMQ**（火山引擎托管版）— Agent 间通信 + 异步任务调度 |
 | 后端 API | FastAPI |
 | 存储 | PostgreSQL + Redis + MinIO(本地)/TOS(云) |
-| 向量库/RAG | **Chroma** |
+| 向量库/RAG | **Qdrant**（自部署在 ECS 上） |
 | 人类交互 | **OpenClaw**（聊天界面 + Web 时间轴） |
 | 容器 | VKE（火山 Kubernetes） |
 
@@ -101,7 +82,7 @@
 | LLM（闭源，脚本阶段） | Gemini 3.1, Claude Opus 4.6 | Google AI / Anthropic API | N01/N02/N04/N05 |
 | LLM（闭源，质检投票） | GPT 5.4, Gemini 3.1, Claude | OpenAI / Google / Anthropic API | N03/N11/N15 |
 | LLM（闭源，多模态分析） | Gemini 3.1 | Google AI API | N06/N12/N16 |
-| LLM（自部署） | Qwen3-72B, DeepSeek-R1, Llama-3.3-70B | vLLM on GPU / 火山方舟 API | 备用 / RAG 嵌入 |
+| LLM（自部署） | Qwen3-32B（本地兜底）等 | vLLM on GPU / 火山方舟 API | 兜底/离线场景，不作为 v1 主力 |
 | LLM（外部API） | Claude, GPT, Gemini | 第三方 API | N03/N11/N15（质检多模型投票） |
 | 图像生成 | FLUX.2 Dev, FireRed-1.1, Z-Image-Turbo | ComfyUI 集群（GPU） | N07/N09/N10/N13 |
 | 视频生成 | LTX-2.3, Wan2.2, SkyReels, ViVi, Mochi | ComfyUI 集群（GPU） | N14 |
@@ -126,7 +107,7 @@
 
 ## 2. Node Registry 设计
 
-### 2.1 完整节点清单（26 执行点 — 对齐选型表）
+### 2.1 完整节点清单（28 执行点 — 含 N07b、N16b）
 
 #### SCRIPT（剧本）
 
@@ -149,7 +130,8 @@
 |---|---|---|---|---|---|---|---|---|---|
 | 6 | N06_VISUAL_ELEMENT_GEN | 视觉元素生成 | Visual Director | Gemini 3.1 / Opus 4.6 | Text Concat / Prompt Builder | N04 + N05 | **仅 Prompt + ComfyUI 工作流 JSON（不产出图）** | 电影级前置规范 + 等级关联 | — |
 | 7 | N07_ART_ASSET_GEN | 美术产品图生成 | Visual Director | FLUX.2 Dev / Z-Image-Turbo + FireRed-1.1 | I-image, Turbo, FireRed MultiRef | N06 | 角色/场景/道具美术图 | 风格参考图像 + 一致性策略 | ~25min |
-| 8 | N08_ART_HUMAN_GATE | 美术产品人类检确 | **Gate: Stage1（仅剪辑中台，资产级）** | — | Image Preview | N07 | ReviewTask | — | +人工 |
+| 7b | N07b_VOICE_GEN | 核心角色音色生成 | Audio Director | CosyVoice / ElevenLabs | — | N06(角色档案) | CandidateSet\<VoiceSample\>[] 每角色 2-3 候选 | — | ~10min |
+| 8 | N08_ART_HUMAN_GATE | 美术产品人类检确 | **Gate: Stage1（仅剪辑中台，资产级 + 音色选定）** | — | Image Preview + Voice Preview | N07 ∥ N07b | ReviewTask（含音色候选） | — | +人工 |
 | 9 | N09_ART_FREEZE | 美术产品定稿 | Visual Director | FireRed-1.1 | FireRed + BatchRun | N08(通过) | 高保真固化资产基线 | — | — |
 
 #### KEYFRAME（关键帧）
@@ -158,7 +140,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | 10 | N10_KEYFRAME_GEN | 关键帧生成 | Visual Director | FLUX.2 Dev + FireRed-1.1 | FireRed MultiRef, ControlNet(自动选), NAG | N06 + N09 | 2K 关键帧图像 (per shot) | 关键帧设定 | ~15min |
 | 11 | N11_KEYFRAME_QC | 关键帧质检 | Quality Guardian | Gemini + Claude + GPT | ReActor + FaceID Checker | N10 | 多模型评分 JSON | 跨帧对比校验 | ~15min |
-| 12 | N12_KEYFRAME_CONTINUITY | 剧情连续性检查 | Storyboard Planner | Gemini 3.1 (多模态) | — | N11(通过) | 连续性分析 + 修改建议 | 主剧情上下文联连 | ~10min |
+| 12 | N12_KEYFRAME_CONTINUITY | 剧情连续性检查 | Quality Inspector | Gemini 3.1 (多模态) | — | N11(通过) | 连续性分析 + 修改建议 | 主剧情上下文联连 | ~10min |
 | 13 | N13_KEYFRAME_FREEZE | 关键帧定稿 | Visual Director | FireRed | FireRed Edit | N12 | 固化关键帧 | — | — |
 
 #### VIDEO（视频）
@@ -167,8 +149,9 @@
 |---|---|---|---|---|---|---|---|---|---|
 | 14 | N14_VIDEO_GEN | 视频素材生成 | Visual Director | **LTX-2.3**(默认) / Wan2.2 / HuMo(S2条件) | LTXVividGuide Multi, HuMo+Embeds, 模型路由 | N13 | 视频片段 1080p (per shot, 略长+自动裁切) | 动感性映射 | ~80min |
 | 15 | N15_VIDEO_QC | 视频素材质检 | Quality Guardian | 多模型 | ReActor + Physics Checker | N14 | 多维度评分 JSON | 动态方面校对 | ~20min |
-| 16 | N16_VIDEO_CONTINUITY_PACE | 剧情&节奏连续性 | Storyboard Planner | Gemini 3.1 (多模态) | — | N15(通过) | 节奏分析 + 剪材建议 | 节奏解码 + 方案参考 | ~15min |
-| 17 | N17_VIDEO_FREEZE | 视频素材定稿 | Visual Director | — | — | N16 | 固化视频片段 | — | ~10min |
+| 16 | N16_VIDEO_CONTINUITY_PACE | 剧情&节奏连续性 | Shot Designer | Gemini 3.1 (多模态) | — | N15(通过) | PacingReport（节奏分析 + 剪材建议） | 节奏解码 + 方案参考 | ~15min |
+| 16b | N16b_TONE_RHYTHM_ADJUST | 影调与节奏调整 | Shot Designer + Compositor(协作) | FFmpeg(剪辑) + Gemini 3.1(决策) | — | N16 | 调整后视频序列 + 更新时间轴 | — | ~10min |
+| 17 | N17_VIDEO_FREEZE | 视频素材定稿 | Visual Director | RealESRGAN/Topaz(超分) + FFmpeg | — | N16b | 固化视频片段（含超分） | — | ~10min |
 | 18 | N18_VISUAL_HUMAN_GATE | 视觉素材人类检确 | **Gate: Stage2（仅质检员，shot级）** | — | Timeline Preview | N17 | ReviewTask | — | ~10min |
 | 19 | N19_VISUAL_FREEZE | 视觉素材定稿 | — | — | — | N18(通过) | 固化视觉素材 | — | — |
 
@@ -184,7 +167,7 @@
 
 | # | node_id | 名称 | Agent | 模型 | ComfyUI 节点 | 依赖 | 产物 | 预估时间 |
 |---|---|---|---|---|---|---|---|---|
-| 23 | N23_FINAL_COMPOSE | 成片整合 | Director | FFmpeg(主) + VHS_VideoCombine(辅) | — | N22 | 成片视频(横+竖,≤500MB)+时间轴+字幕烧录+高光闪回(LLM选) | ~15min |
+| 23 | N23_FINAL_COMPOSE | 成片整合 | Compositor | FFmpeg(主) + VHS_VideoCombine(辅) | — | N22 | 成片视频(横+竖,≤500MB)+时间轴+字幕烧录+高光闪回(LLM选) | ~15min |
 | 24 | N24_FINAL_HUMAN_GATE | 成片人类检确查 | **Gate: Stage4（串行3步：质检员→中台→合作方，episode级）** | — | Video Player + Timeline | N23 | ReviewTask ×3 | ~15min×3 |
 | 25 | N25_FINAL_FREEZE | 成片定稿 | Director | — | — | N24(通过) | 成片入池 | ~5min |
 | 26 | N26_DISTRIBUTION | TikTok/飞书推送 | Director | — | Feishu + TikTok | N25 | 推送记录 | — |
@@ -201,7 +184,9 @@ flowchart TD
     N05 --> N06[N06 视觉元素生成]
     N04 --> N06
     N06 --> N07[N07 美术图生成]
+    N06 --> N07b[N07b 角色音色生成]
     N07 --> N08{N08 Gate Stage1}
+    N07b --> N08
     N08 -->|通过| N09[N09 美术定稿]
     N08 -->|打回| N06
     N06 --> N10[N10 关键帧生成]
@@ -214,7 +199,8 @@ flowchart TD
     N14 --> N15[N15 视频质检]
     N15 -->|通过| N16[N16 节奏连续性]
     N15 -->|打回| N14
-    N16 --> N17[N17 视频定稿]
+    N16 --> N16b[N16b 影调节奏调整]
+    N16b --> N17[N17 视频定稿]
     N17 --> N18{N18 Gate Stage2}
     N18 -->|通过| N19[N19 视觉定稿]
     N19 --> N20[N20 视听整合]
@@ -267,14 +253,14 @@ Supervisor 收到事件（新 Run / NodeRun 完成 / Gate 放行）
 
 | 组件 | 说明 |
 |---|---|
-| Chroma 向量库 | 存储导演参考、历史案例、风格基线、评审规则、剧本分析模板 |
+| Qdrant 向量库 | 存储导演参考、历史案例（链路级 RAGChainCase）、风格基线、评审规则、剧本分析模板 |
 | 知识入库 | 人工上传 + 系统自动沉淀（通过的案例自动入库） |
 | 检索时机 | Worker Agent 执行前，按 `node_registry.rag_sources` 配置检索 |
 | 注入方式 | 作为 system prompt / context 注入 LLM 调用 |
 
 ### 3.4 OpenClaw 集成
 
-- 4 个 Gate 节点的人类交互通过 OpenClaw 提供。
+- 4 个 Gate 节点的人类交互通过 OpenClaw 提供，且审核任务管理由 OpenClaw 承载（core 负责真相对象与网关契约）。
 - Gate 审核角色与流转规则如下：
 
 | Gate | 审核角色 | 审核层级 | 任务创建方式 | 流转规则 |
@@ -322,7 +308,54 @@ Supervisor 收到事件（新 Run / NodeRun 完成 / Gate 放行）
 | 修订总结/历史 | ✅ | ✅ | ✅(仅本集、脱敏) |
 | 导出/下载 | ✅(可控) | ✅ | ❌ |
 
-### 3.5 Reflection / Feedback Learning 设计
+### 3.5 Agent Runtime（v2.2 新增）
+
+每个 Agent 基于 `BaseAgent` 类封装五步决策循环：
+
+```python
+class BaseAgent:
+    async def execute(self, task: NodeTask) -> NodeOutput:
+        # ① 理解上下文 — 读取 ShotSpec/场景/角色 + 项目集约束
+        context = await self.load_context(task)
+        # ② 检索经验 — RAG 召回 + Agent 记忆
+        memories = await self.read_memory(scope="project", key_prefix=task.key)
+        rag_cases = await self.search_rag(tags=task.retrieval_tags, top_k=3)
+        # ③ 选择策略 — prompt 模板/适配器/候选数/模型/成本
+        strategy = self.select_strategy(context, memories, rag_cases)
+        # ④ 执行+自检
+        result = await self.run(strategy)
+        # ⑤ 记录+沉淀 — 决策 trace + 高分结果入记忆
+        await self.record_trace(task, strategy, result)
+        if result.quality_score > 9.0:
+            await self.save_memory(key=..., value=...)
+        return result
+```
+
+### 3.6 Agent 记忆系统（v2.2 新增）
+
+三层记忆解决不同时间尺度的经验积累：
+
+| 记忆层 | 存储位置 | 生命周期 | 用途 |
+|---|---|---|---|
+| **工作记忆** | LangGraph State | 单次任务执行期间 | 当前镜头上下文、中间计算结果 |
+| **项目记忆** | PostgreSQL `agent_memory` 表 | 项目周期 | 角色最佳参数、剧目风格约束等 |
+| **长期记忆** | RAG Qdrant + Prompt 资产库 | 永久（跨项目） | 全链路成功案例、prompt 版本历史、风格模式 |
+
+### 3.7 Supervisor 横切守卫 checkpoint（v2.2 新增）
+
+Supervisor 在以下关键 checkpoint 同时校验成本和项目需求：
+
+| 检查点 | 成本校验 | 项目需求校验 | 检查方式 |
+|---|---|---|---|
+| N02 完成后 | 镜头数→估算总成本 | 时长在平台约束范围内？节奏符合偏好？ | 规则引擎 |
+| N05 完成后 | S2 占比→成本风险评估 | 是否有违反合规红线的内容描述？ | 规则+LLM |
+| N09 完成后 | 美术候选数→成本 | 画风是否符合平台调性？品牌色匹配？ | LLM 多模态 |
+| N14/N17 | 实时累计成本 vs 预算 | 分辨率/画幅/编码/时长符合硬约束？ | 规则引擎 |
+| N23 完成后 | 单集总成本结算 | 所有 platform_constraints 满足？ | 规则+LLM |
+
+校验不通过 → 自动生成 QualityIssue → 路由到对应节点修正。
+
+### 3.8 Reflection / Feedback Learning 设计
 
 Reflection 不是对 RAG 的补充说明，而是一条独立能力主线：
 

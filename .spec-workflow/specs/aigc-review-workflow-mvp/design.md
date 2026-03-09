@@ -3,7 +3,7 @@
 ## 文档信息
 
 - **产品名称**：AIGC短剧生产线（MVP）— 审核工作流
-- **版本**：V1.0
+- **版本**：V1.1（对齐 Pipeline v2.2）
 - **依赖**：requirements.md
 
 ---
@@ -23,6 +23,7 @@
 - 前端：任务面板 + 4 个审核页面（对应 4 节点）。
 - 后端：任务/版本/审阅/锁定/归因 API；与现有 Agent 接口、数据库对接。
 - 外部：调「调好的接口」完成模型相关能力（节点2 等）；节点1 右侧自然语言、配音音色、节点4 修订总结等调接口即可。
+- OpenClaw：审核员统一入口（看片+批注+任务处理），本设计消费其经 Review Gateway 派生的审核 DTO。
 
 边界约束：
 - 本设计是审核消费层设计，不定义编排、运行态、回炉、成本、质量、吞吐等系统级真相。
@@ -93,6 +94,44 @@
 - 存储结构：scope, severity, anchor, note（见 requirements US-30）。
 - 提交后：调后端/Agent 接口生成重生成任务或修订；节点1 按资产类别、节点2 按关键帧/视频范围、节点3/4 按归属 stage。
 
+### 2.4 Review Dispatcher Agent 集成（v2.2 新增）
+
+v2.2 引入 Review Dispatcher 作为专职 Agent，负责所有 Gate 节点（N08/N18/N21/N24）的批注解析与任务调度：
+
+**自然语言批注 → 任务派发流程：**
+
+```
+审核员在 OpenClaw 提交自然语言批注
+  │
+  ▼
+Review Dispatcher Agent（Claude Opus 4.6）
+  │  ① 解析意图：这是"修改请求"还是"问题反馈"？
+  │  ② 拆分任务：影响哪些镜头？需要修改什么？谁执行？
+  │  ③ 生成结构化指令
+  │
+  ▼
+路由到对应生产 Agent
+  │  Visual Director / Audio Director / Shot Designer / ...
+  │
+  ▼
+Agent 执行修改 → 生成新候选 → 更新审核页面
+```
+
+**核心能力：**
+- 理解审核员的自然语言意图（"这个角色的脸型不对"→修改 N07 角色参考图）
+- 将模糊指令拆分为具体可执行任务（"整体感觉太暗"→为所有场景调整 brightness +20%）
+- 自动判断任务应路由到哪个 Agent 执行
+- 追踪执行结果并更新审核界面
+
+### 2.5 节点 1 音色选定（v2.2 新增）
+
+Gate 1（N08）现在同时包含音色选定，因为 Audio Director Agent 在 N07b 已并行生成核心角色音色候选：
+
+- 审核页面需展示每个核心角色的音色候选列表（2-3 个样本）
+- 每个音色候选提供试听按钮
+- 剪辑中台选定后，写入 CharacterProfile.voice_config
+- 音色选定是 N08 Gate 通过的必要条件之一
+
 ---
 
 ## 3. API 设计要点
@@ -102,14 +141,15 @@
 - `GET /api/tasks/panel`  
   - 返回：分组（紧急驳回/质检中/新剧待检/生成中）、全局摘要、任务卡片列表（已按优先级排序）。  
   - 排序逻辑与 requirements 4.1/US-5 一致（写死 MVP）。
+  - 建议补充字段：`source_system`（`openclaw|core`）、`source_task_id`（OpenClaw 任务主键映射）。
 
 - `POST /api/tasks/:taskId/claim`  
   - 领取/继续：将 StageTask 置为 in_progress、locked_by 当前用户、locked_at 当前时间；若已被锁则返回 409 与占用者信息。
 
 ### 3.2 节点 1（美术资产）
 
-- `GET /api/series/:seriesId/episodes/:episodeId/stage/1`  
-  - 返回：流程步进、左侧导航结构、资产列表及每资产 4 版 Variant（含分数、定稿状态）、音色候选与当前基线。
+- `GET /api/series/:seriesId/episodes/:episodeId/stage/1`
+  - 返回：流程步进、左侧导航结构、资产列表及每资产候选 Variant（含分数、定稿状态）、**N07b 生成的核心角色音色候选**（每角色 2-3 候选样本 + 试听 URL）与当前基线。
 
 - `POST /api/series/:seriesId/episodes/:episodeId/stage/1/lock-variant`  
   - 定稿：将某 variant_id 设为该 asset 的定稿。
@@ -126,7 +166,7 @@
 ### 3.3 节点 2（视觉素材）
 
 - `GET /api/episodes/:episodeId/stage/2`  
-  - 返回：分镜/镜头列表、每镜头关键帧与视频候选、时间轴默认选用、分数、状态（已通过/待修改/待审核）。
+  - 返回：分镜/镜头列表、每镜头关键帧与视频候选、时间轴默认选用、分数、状态（已通过/待修改/待审核）；候选需明确区分 `pre_n16b` 与 `post_n16b`（若存在）版本来源。
 
 - `POST /api/episodes/:episodeId/stage/2/set-timeline-default`  
   - 将某 shot 的某 variant 设为时间轴默认。
@@ -134,8 +174,11 @@
 - `POST /api/episodes/:episodeId/stage/2/feedback`  
   - Body：shot_id, scope（关键帧|视频|都改）, note；创建回炉任务，生成新候选。
 
-- `POST /api/episodes/:episodeId/stage/2/decision`  
+- `POST /api/episodes/:episodeId/stage/2/decision`
   - 镜头级或分集级通过/打回；打回带 reason 与可选归属。
+
+- `POST /api/episodes/:episodeId/stage/2/accept-all-ai`（v2.2 新增）
+  - 「全部接受 AI 推荐」快速通过：一键确认所有 AI 自动推荐的最高分候选，标记所有 shot 为 approved 并整体放行。
 
 ### 3.4 节点 3（视听整合）
 

@@ -45,5 +45,33 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'priority_group') THEN
         CREATE TYPE priority_group AS ENUM ('urgent_rejected', 'in_qc', 'new_pending', 'generating');
     END IF;
+
+    -- ═══ v2.2 Agent Infrastructure Enums ═══
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agent_name_enum') THEN
+        CREATE TYPE core_pipeline.agent_name_enum AS ENUM (
+            'script_analyst', 'shot_designer',
+            'visual_director', 'audio_director', 'compositor',
+            'quality_inspector', 'review_dispatcher',
+            'supervisor', 'evolution_engine',
+            'orchestrator'
+        );
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'memory_type_enum') THEN
+        CREATE TYPE core_pipeline.memory_type_enum AS ENUM (
+            'task_summary', 'lesson_learned', 'preference', 'statistics'
+        );
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'memory_scope_enum') THEN
+        CREATE TYPE core_pipeline.memory_scope_enum AS ENUM ('global', 'project', 'episode');
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'evolution_type_enum') THEN
+        CREATE TYPE core_pipeline.evolution_type_enum AS ENUM (
+            'reflection', 'prompt_ab_test', 'lora_train', 'rag_cleanup'
+        );
+    END IF;
 END
 $$;

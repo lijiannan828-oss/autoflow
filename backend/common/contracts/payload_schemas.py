@@ -60,6 +60,19 @@ class SubtitleClipItem(TypedDict, total=False):
     duration: float
 
 
+class VoiceSampleItem(TypedDict, total=False):
+    """v2.2: N07b 音色候选样本（AudioDirector 生成）"""
+    id: str
+    character_id: str | None
+    character_name: str | None
+    voice_model: str | None          # "cosyvoice" | "elevenlabs" | ...
+    voice_preset: str | None         # model-specific preset name
+    sample_url: str | None           # TOS URL to audio sample
+    sample_duration: float | None    # seconds
+    score: float | None              # QC score 0-10
+    tags: list[str]                  # e.g. ["温柔", "成熟", "女性"]
+
+
 class CharacterItem(TypedDict, total=False):
     id: str
     name: str
@@ -96,8 +109,12 @@ class Stage1Payload(TypedDict, total=False):
     highlights: list[HighlightItem]
     candidates: list[CandidateItem]
 
+    # v2.2: voice candidates from N07b (AudioDirector)
+    voice_candidates: list[VoiceSampleItem]
+
     # reviewer edits
     locked_image_id: str | None
+    locked_voice_id: str | None      # v2.2: selected voice sample
 
 
 # ─── Stage 2 / N18 — 视觉素材审核 (per-shot) ────────────────────────
@@ -206,6 +223,10 @@ def enrich_stage1_payload(
         for key in ("project_name", "script_summary", "highlights"):
             if key in episode_ctx and key not in out:
                 out[key] = episode_ctx[key]
+
+    # v2.2: merge voice candidates from N07b (parallel with N07)
+    if "voice_candidates" in upstream_output:
+        out["voice_candidates"] = upstream_output["voice_candidates"]
 
     return out
 

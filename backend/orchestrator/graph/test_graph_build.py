@@ -20,7 +20,7 @@ def test_topology_sanity():
         stage_no_for_node,
     )
 
-    assert len(PIPELINE_NODES) == 26, f"expected 26 nodes, got {len(PIPELINE_NODES)}"
+    assert len(PIPELINE_NODES) == 28, f"expected 28 nodes, got {len(PIPELINE_NODES)}"
     assert PIPELINE_NODES[0] == "N01"
     assert PIPELINE_NODES[-1] == "N26"
 
@@ -412,6 +412,125 @@ def test_envelope_builders():
     print("  envelope builders: OK")
 
 
+def test_n07b_voice_handler():
+    """N07b handler produces voice candidates in stub mode."""
+    from backend.orchestrator.handlers.voice_handler import handle_N07b
+    from backend.orchestrator.graph.state import make_initial_state
+
+    state = make_initial_state(run_id="r", episode_id="ep", episode_version_id="ev")
+    result = handle_N07b("N07b", state, {})
+    assert result["node_id"] == "N07b"
+    assert result["status"] == "succeeded"
+    payload = result.get("output_payload", {})
+    assert len(payload.get("voice_candidates", [])) >= 1
+    assert payload.get("mode") == "stub"
+    print("  N07b voice handler: OK")
+
+
+def test_n16b_tone_handler():
+    """N16b handler produces pacing adjustments in stub mode."""
+    from backend.orchestrator.handlers.tone_handler import handle_N16b
+    from backend.orchestrator.graph.state import make_initial_state
+
+    state = make_initial_state(run_id="r", episode_id="ep", episode_version_id="ev")
+    result = handle_N16b("N16b", state, {})
+    assert result["node_id"] == "N16b"
+    assert result["status"] == "succeeded"
+    payload = result.get("output_payload", {})
+    assert "adjustments" in payload
+    assert payload.get("mode") == "stub"
+    print("  N16b tone handler: OK")
+
+
+def test_agent_bridge():
+    """Agent bridge delegates to registered agents when no handler exists."""
+    from backend.agents.registry import register_all_agents, clear_registry
+    from backend.orchestrator.graph.workers import _try_agent_bridge
+    from backend.orchestrator.graph.state import make_initial_state
+
+    clear_registry()
+    register_all_agents()
+
+    state = make_initial_state(run_id="r", episode_id="ep", episode_version_id="ev")
+    config = {"input_envelope": {}, "upstream_outputs": {}, "stage_group": "stage1"}
+
+    # N01 → script_analyst agent
+    result = _try_agent_bridge("N01", state, config)
+    assert result is not None
+    assert result["status"] == "succeeded"
+    assert result["model_provider"] == "script_analyst"
+
+    # N07b → audio_director agent
+    result2 = _try_agent_bridge("N07b", state, config)
+    assert result2 is not None
+    assert result2["model_provider"] == "audio_director"
+
+    clear_registry()
+    print("  agent bridge: OK")
+
+
+def test_node_decision_layer():
+    """NODE_DECISION_LAYER covers all 28 nodes and routes correctly."""
+    from backend.orchestrator.graph.workers import NODE_DECISION_LAYER
+    from backend.orchestrator.graph.topology import PIPELINE_NODES
+
+    # All 28 nodes must be mapped
+    assert len(NODE_DECISION_LAYER) == 28, f"expected 28, got {len(NODE_DECISION_LAYER)}"
+    for node_id in PIPELINE_NODES:
+        assert node_id in NODE_DECISION_LAYER, f"{node_id} missing from NODE_DECISION_LAYER"
+
+    # Verify layer counts
+    from collections import Counter
+    c = Counter(NODE_DECISION_LAYER.values())
+    assert c["plan"] == 4, f"expected 4 plan nodes, got {c['plan']}"
+    assert c["shot"] == 15, f"expected 15 shot nodes, got {c['shot']}"
+    assert c["review"] == 5, f"expected 5 review nodes, got {c['review']}"
+    assert c["legacy"] == 4, f"expected 4 legacy nodes, got {c['legacy']}"
+
+    # Gates are always legacy
+    for gate in ("N08", "N18", "N21", "N24"):
+        assert NODE_DECISION_LAYER[gate] == "legacy"
+
+    print("  NODE_DECISION_LAYER: OK")
+
+
+def test_three_layer_agent_routing():
+    """Agents execute correctly in their designated mode."""
+    from backend.agents.registry import register_all_agents, clear_registry, get_agent
+    from backend.agents.base import AgentContext
+
+    clear_registry()
+    register_all_agents()
+
+    # Plan mode: ScriptAnalyst.plan_episode
+    agent = get_agent("script_analyst")
+    ctx = AgentContext(run_id="t", episode_version_id="ev", node_id="N01", mode="plan")
+    r = agent.execute(ctx)
+    assert r.success, f"script_analyst plan failed: {r.error}"
+
+    # Shot mode: Compositor.execute_shot
+    agent = get_agent("compositor")
+    ctx = AgentContext(run_id="t", episode_version_id="ev", node_id="N23", mode="shot")
+    r = agent.execute(ctx)
+    assert r.success, f"compositor shot failed: {r.error}"
+
+    # Review mode: QualityInspector.review_batch
+    agent = get_agent("quality_inspector")
+    ctx = AgentContext(run_id="t", episode_version_id="ev", node_id="N03", mode="review")
+    r = agent.execute(ctx)
+    assert r.success, f"quality_inspector review failed: {r.error}"
+
+    # Wrong mode → graceful failure (not crash)
+    agent = get_agent("compositor")
+    ctx = AgentContext(run_id="t", episode_version_id="ev", node_id="N23", mode="plan")
+    r = agent.execute(ctx)
+    assert not r.success, "compositor should fail in plan mode"
+    assert "does not implement" in (r.error or "")
+
+    clear_registry()
+    print("  three-layer agent routing: OK")
+
+
 def test_compile_pipeline_with_runtime_hooks():
     from backend.orchestrator.graph.builder import compile_pipeline
     from backend.orchestrator.graph.context import load_episode_context
@@ -523,6 +642,11 @@ def main():
     test_gate_scope_item_guard()
     test_supervisor_qc_reject_exceed_continues()
     test_envelope_builders()
+    test_n07b_voice_handler()
+    test_n16b_tone_handler()
+    test_agent_bridge()
+    test_node_decision_layer()
+    test_three_layer_agent_routing()
     test_compile_pipeline_with_runtime_hooks()
     test_script_stage_handler_chain()
     test_compiled_graph_interrupts_at_first_gate()

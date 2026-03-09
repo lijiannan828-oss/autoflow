@@ -10,9 +10,9 @@ from __future__ import annotations
 
 PIPELINE_NODES: list[str] = [
     "N01", "N02", "N03", "N04", "N05",
-    "N06", "N07", "N08", "N09",
+    "N06", "N07", "N07b", "N08", "N09",
     "N10", "N11", "N12", "N13",
-    "N14", "N15", "N16", "N17", "N18", "N19",
+    "N14", "N15", "N16", "N16b", "N17", "N18", "N19",
     "N20", "N21", "N22",
     "N23", "N24", "N25", "N26",
 ]
@@ -26,6 +26,7 @@ NODE_NAME: dict[str, str] = {
     "N05": "镜头分级",
     "N06": "视觉元素生成",
     "N07": "美术产品图生成",
+    "N07b": "核心角色音色生成",
     "N08": "Stage1 资产审核 Gate",
     "N09": "美术定稿固化",
     "N10": "关键帧生成",
@@ -35,6 +36,7 @@ NODE_NAME: dict[str, str] = {
     "N14": "视频生成",
     "N15": "视频质检",
     "N16": "节奏连续性分析",
+    "N16b": "影调与节奏调整",
     "N17": "视频定稿固化",
     "N18": "Stage2 Shot 审核 Gate",
     "N19": "视觉整体定稿",
@@ -57,7 +59,8 @@ NODE_DEPENDS_ON: dict[str, list[str]] = {
     "N05": ["N04"],
     "N06": ["N04", "N05"],
     "N07": ["N06"],
-    "N08": ["N07"],
+    "N07b": ["N06"],        # 与 N07 并行，都依赖 N06
+    "N08": ["N07", "N07b"], # 等两路都完成后进入 Gate
     "N09": ["N08"],
     "N10": ["N06", "N09"],
     "N11": ["N10"],
@@ -66,7 +69,8 @@ NODE_DEPENDS_ON: dict[str, list[str]] = {
     "N14": ["N13"],
     "N15": ["N14"],
     "N16": ["N15"],
-    "N17": ["N16"],
+    "N16b": ["N16"],        # N16 → N16b → N17 串行
+    "N17": ["N16b"],        # 原依赖 N16，改为依赖 N16b
     "N18": ["N17"],
     "N19": ["N18"],
     "N20": ["N19"],
@@ -108,11 +112,20 @@ MAX_AUTO_REJECTS: int = 3
 
 # ── Stage assignment ────────────────────────────────────────────────────
 def stage_no_for_node(node_id: str) -> int:
-    """Return the pipeline stage (1-4) for the given node_id."""
-    try:
-        n = int(node_id[1:])
-    except (ValueError, IndexError) as exc:
-        raise ValueError(f"invalid node_id: {node_id}") from exc
+    """Return the pipeline stage (1-4) for the given node_id.
+
+    Handles suffixed node IDs like N07b, N16b by extracting the numeric part.
+    """
+    # Extract numeric part: "N07b" → 7, "N16b" → 16
+    digits = ""
+    for ch in node_id[1:]:
+        if ch.isdigit():
+            digits += ch
+        else:
+            break
+    if not digits:
+        raise ValueError(f"invalid node_id: {node_id}")
+    n = int(digits)
     if 1 <= n <= 8:
         return 1
     if 9 <= n <= 18:
@@ -127,39 +140,41 @@ def stage_no_for_node(node_id: str) -> int:
 # ── Agent role ──────────────────────────────────────────────────────────
 NODE_AGENT_ROLE: dict[str, str] = {
     "N01": "script_analyst",
-    "N02": "director",
-    "N03": "quality_guardian",
-    "N04": "director",
-    "N05": "director",
+    "N02": "shot_designer",
+    "N03": "quality_inspector",
+    "N04": "shot_designer",
+    "N05": "shot_designer",
     "N06": "visual_director",
     "N07": "visual_director",
-    "N08": "human_review_entry",
+    "N07b": "audio_director",
+    "N08": "review_dispatcher",
     "N09": "visual_director",
     "N10": "visual_director",
-    "N11": "quality_guardian",
-    "N12": "storyboard_planner",
+    "N11": "quality_inspector",
+    "N12": "quality_inspector",
     "N13": "visual_director",
     "N14": "visual_director",
-    "N15": "quality_guardian",
-    "N16": "storyboard_planner",
+    "N15": "quality_inspector",
+    "N16": "shot_designer",
+    "N16b": "shot_designer",  # + compositor 协作
     "N17": "visual_director",
-    "N18": "human_review_entry",
+    "N18": "review_dispatcher",
     "N19": "visual_director",
     "N20": "audio_director",
-    "N21": "human_review_entry",
+    "N21": "review_dispatcher",
     "N22": "audio_director",
-    "N23": "director",
-    "N24": "human_review_entry",
-    "N25": "director",
-    "N26": "director",
+    "N23": "compositor",
+    "N24": "review_dispatcher",
+    "N25": "compositor",
+    "N26": "compositor",
 }
 
 # ── Stage-level grouping ────────────────────────────────────────────────
 STAGE_GROUP: dict[str, str] = {
     "N01": "script", "N02": "script", "N03": "script", "N04": "script", "N05": "script",
-    "N06": "art", "N07": "art", "N08": "art", "N09": "art",
+    "N06": "art", "N07": "art", "N07b": "art", "N08": "art", "N09": "art",
     "N10": "keyframe", "N11": "keyframe", "N12": "keyframe", "N13": "keyframe",
-    "N14": "video", "N15": "video", "N16": "video", "N17": "video",
+    "N14": "video", "N15": "video", "N16": "video", "N16b": "video", "N17": "video",
     "N18": "video", "N19": "video",
     "N20": "audio", "N21": "audio", "N22": "audio",
     "N23": "final", "N24": "final", "N25": "final", "N26": "final",
@@ -169,6 +184,24 @@ STAGE_GROUP: dict[str, str] = {
 # ── 节点输出粒度（per_shot / per_asset / episode）─────────────────────
 PER_SHOT_NODES: frozenset[str] = frozenset({"N10", "N11", "N14", "N15"})
 PER_ASSET_NODES: frozenset[str] = frozenset({"N07"})
+
+
+# ── Parallel node groups ─────────────────────────────────────────────
+# Nodes that execute in parallel; supervisor dispatches both and waits
+# for both to complete before advancing to the join node.
+PARALLEL_GROUPS: dict[str, dict] = {
+    "N07_N07b": {
+        "nodes": ["N07", "N07b"],
+        "trigger_after": "N06",   # dispatch both after N06 completes
+        "join_at": "N08",         # advance to N08 only when both done
+    },
+}
+
+# ── Supervisor checkpoint nodes ──────────────────────────────────────
+# SupervisorAgent 横切守卫在这些节点完成后自动触发成本+合规检查
+SUPERVISOR_CHECKPOINT_NODES: frozenset[str] = frozenset({
+    "N02", "N05", "N09", "N14", "N17", "N23",
+})
 
 
 def output_scope(node_id: str) -> str:

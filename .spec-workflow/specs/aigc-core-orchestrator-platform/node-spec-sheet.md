@@ -1,4 +1,4 @@
-# 26 节点规格卡（Node Spec Sheet）
+# 28 节点规格卡（Node Spec Sheet — v2.2 含 N07b、N16b）
 
 ## 文档信息
 
@@ -873,6 +873,58 @@ interface ArtAssetCandidate {
 
 ---
 
+### N07b · 核心角色音色生成（v2.2 新增）
+
+| 字段 | 值 |
+|------|-----|
+| node_id | `N07b` |
+| 全称 | `N07b_VOICE_GEN` — 核心角色音色生成 |
+| stage_group | `art` |
+| agent_role | `audio_director` |
+| 依赖 | `N06`（角色档案 CharacterProfile[]） |
+| is_human_gate | `false` |
+| 并行关系 | **与 N07 并行执行** |
+
+> Audio Director 在美术阶段即介入，为核心角色生成音色候选样本。与 N07 美术图生成并行，在 N08 Gate Stage1 中由剪辑中台同步确认音色。
+
+#### I/O 规格
+
+| 方向 | 类型 | 说明 |
+|------|------|------|
+| **Input** | `NodeInputEnvelope<{ characters: CharacterProfile[], voice_requirements: VoiceRequirement[] }>` | 角色档案 + 音色需求（性别/年龄/风格/情感） |
+| **Output** | `NodeOutputEnvelope<{ voice_candidates: CandidateSet<VoiceSample>[] }>` | 每角色 2-3 个音色候选样本 |
+
+Output 去向：
+- 音色候选样本 → TOS 存储
+- 候选列表传递给 N08 Gate，由剪辑中台试听选定
+- 选定音色写入 CharacterProfile.voice_config，供 N20 TTS 使用
+
+#### 模型配置
+
+| 字段 | 值 | 状态 |
+|------|-----|------|
+| provider | `tts` | ✅ |
+| primary_model | `CosyVoice`（中文） / `ElevenLabs`（英文） | ✅ |
+| endpoint | 自部署 GPU / 第三方 API | ✅ |
+
+#### 运行时配置
+
+| 字段 | 值 | 状态 |
+|------|-----|------|
+| timeout_per_attempt_s | `600` | ✅ (~10min，多角色多候选) |
+| max_retries | `2` | ✅ |
+| retry_backoff | `exponential (5s, 15s)` | ✅ |
+| execution_mode | `parallel_per_character` | ✅ 各角色并行生成 |
+| candidate_count | `2-3 per character` | ✅ |
+
+#### 产物（Artifacts）
+
+| artifact_type | anchor_type | anchor_id | 说明 |
+|---------------|-------------|-----------|------|
+| `tts` | asset | character_id | 每个角色的音色候选音频样本 |
+
+---
+
 ### N08 · Gate Stage1 — 美术资产人工审核
 
 | 字段 | 值 |
@@ -880,8 +932,8 @@ interface ArtAssetCandidate {
 | node_id | `N08` |
 | 全称 | `N08_ART_HUMAN_GATE` — 美术产品人类检确 |
 | stage_group | `art` |
-| agent_role | `human_review_entry` |
-| 依赖 | `N07` |
+| agent_role | `review_dispatcher` |
+| 依赖 | `N07` ∥ `N07b`（两者均完成后触发） |
 | is_human_gate | **`true`** |
 
 #### Gate 配置
@@ -890,23 +942,26 @@ interface ArtAssetCandidate {
 |------|-----|------|
 | stage_no | `1` | ✅ |
 | reviewer_role | `middle_platform`（剪辑中台） | ✅ |
-| review_granularity | `asset`（资产级） | ✅ |
+| review_granularity | `asset`（资产级 + 音色选定） | ✅ |
 | review_steps | `[{ step_no: 1, reviewer_role: "middle_platform", skippable: false, granularity: "asset" }]` | ✅ |
 
 #### 审核流程
 
-1. N07 完成后，Supervisor 为每集创建 **1 个 ReviewTask**
-2. 剪辑中台在 OpenClaw 审核界面中看到所有角色/场景/道具的候选图
+1. N07 和 N07b **均完成后**，Supervisor 为每集创建 **1 个 ReviewTask**
+2. 剪辑中台在 OpenClaw 审核界面中看到所有角色/场景/道具的候选图 **+ 核心角色音色候选**
 3. 对每个资产：
    - **选定最佳候选**（selected_candidate_id）
    - 或 **全部打回**（附修改意见，触发 ReturnTicket → 回到 N06 重新生成 prompt → N07 重新出图）
-4. 所有资产确认完毕 → ReviewTask approved → 放行到 N09
+4. 对每个核心角色音色：
+   - **试听并选定音色**（selected_voice_candidate_id）
+   - 选定音色写入 CharacterProfile.voice_config
+5. 所有资产+音色确认完毕 → ReviewTask approved → 放行到 N09
 
 #### I/O 规格
 
 | 方向 | 类型 | 说明 |
 |------|------|------|
-| **Input** | `CandidateSet<ArtAssetCandidate>[]` | N07 输出的多资产多候选图集 |
+| **Input** | `CandidateSet<ArtAssetCandidate>[]` + `CandidateSet<VoiceSample>[]` | N07 输出的多资产多候选图集 + N07b 输出的音色候选 |
 | **Output** | `HumanReview` | 每个资产的选定 candidate_id + 修改意见（如有） |
 
 #### 审核界面需求（OpenClaw）
@@ -1641,6 +1696,72 @@ interface PacingReport {
 
 ---
 
+### N16b · 影调与节奏调整（v2.2 新增）
+
+| 字段 | 值 |
+|------|-----|
+| node_id | `N16b` |
+| 全称 | `N16b_TONE_RHYTHM_ADJUST` — 影调与节奏调整 |
+| stage_group | `video` |
+| agent_role | `shot_designer` + `compositor`（协作） |
+| 依赖 | `N16` |
+| is_human_gate | `false` |
+
+> v2.2 新增节点。在视频定稿前，基于 N16 的 PacingReport 进行影调一致化和节奏调整。Shot Designer 负责决策（调整哪些镜头、调整策略），Compositor 负责执行（FFmpeg 剪辑操作）。
+
+#### I/O 规格
+
+| 方向 | 类型 | 说明 |
+|------|------|------|
+| **Input** | `NodeInputEnvelope<{ frozen_videos: FrozenVideo[], pacing_report: PacingReport, episode_script: EpisodeScript }>` | N15 通过的视频 + N16 的节奏报告 + 剧本参考 |
+| **Output** | `NodeOutputEnvelope<{ adjusted_videos: AdjustedVideo[], updated_timeline: EpisodeTimeline }>` | 调整后的视频序列 + 更新的时间轴 |
+
+```typescript
+interface AdjustedVideo {
+  shot_id: string;
+  original_video: StorageRef;
+  adjusted_video: StorageRef;
+  adjustments_applied: {
+    type: "trim" | "color_grade" | "transition" | "speed_adjust" | "tone_match";
+    params: Record<string, any>;
+    description: string;
+  }[];
+  duration_before_sec: number;
+  duration_after_sec: number;
+}
+```
+
+核心动作：
+1. **影调一致化** — 统一全集色调/亮度/对比度，消除镜头间视觉跳变
+2. **节奏微调** — 根据 PacingReport 调整镜头长短（trim/speed_adjust）
+3. **转场处理** — 在场景切换处添加适当转场效果
+4. **时间轴更新** — 重新计算调整后的时间轴，确保与 TTS 同阶段对齐
+
+#### 模型配置
+
+| 字段 | 值 | 状态 |
+|------|-----|------|
+| 剪辑执行 | `FFmpeg`（规则引擎） | ✅ |
+| 决策 LLM | `Gemini 3.1`（分析影调偏差、决定调整策略） | ✅ |
+| 备选 | `GPT 5.4` | ✅ |
+
+#### 运行时配置
+
+| 字段 | 值 | 状态 |
+|------|-----|------|
+| timeout_per_attempt_s | `600` | ✅ (~10min) |
+| max_retries | `2` | ✅ |
+| execution_mode | `per_episode` | ✅ |
+
+#### 产物（Artifacts）
+
+| artifact_type | anchor_type | 说明 |
+|---------------|-------------|------|
+| `video` | shot | 调整后的视频片段 |
+| `timeline_json` | episode_version | 更新后的时间轴 |
+
+---
+
 ### N17 · 视频素材定稿
 
 | 字段 | 值 |
@@ -1649,15 +1770,15 @@ interface PacingReport {
 | 全称 | `N17_VIDEO_FREEZE` — 视频素材定稿 |
 | stage_group | `video` |
 | agent_role | `visual_director` |
-| 依赖 | `N16` |
+| 依赖 | `N16b` |
 | is_human_gate | `false` |
 
 #### I/O 规格
 
 | 方向 | 类型 | 说明 |
 |------|------|------|
-| **Input** | 选定视频 + PacingReport | |
-| **Output** | `FrozenVideo[]` | 固化视频片段 |
+| **Input** | N16b 调整后视频 + PacingReport | |
+| **Output** | `FrozenVideo[]` | 固化视频片段（含超分） |
 
 核心动作：
 - 如果 PacingReport 建议裁剪 → 执行 trim（FFmpeg）
@@ -2271,6 +2392,22 @@ N22 固化视听产物
 │ 平台API  │     auto_publish or draft
 └──────────┘
 ```
+
+---
+
+## Node ↔ Agent 映射总表（v2.2 更新）
+
+| Agent | 负责节点 | 核心统筹职责 |
+|-------|---------|-------------|
+| **Script Analyst** | N01 | 剧本理解 + 结构化提取 + 分集骨架 |
+| **Shot Designer** | N02, N04, N05, N16, N16b | 分镜设计→定稿→分级→节奏调整，叙事节奏全链路 |
+| **Visual Director** | N06, N07, N09, N10, N13, N14, N17, N19 | 视觉策划→美术生成→关键帧→视频→定稿，视觉质量全链路 |
+| **Audio Director** | N07b, N20, N22 | 音色生成→TTS/唇同步/BGM/SFX→视听定稿 |
+| **Quality Inspector** | N03, N11, N12, N15 | 分镜质检→关键帧质检→连续性→视频质检 |
+| **Compositor** | N16b(协作), N23, N25, N26 | 影调调整(协作)→成片合成→定稿→分发 |
+| **Review Dispatcher** | N08, N18, N21, N24 | 所有 Gate 节点的审核批注解析→任务拆分→执行调度 |
+| **Supervisor** | 横切(N02/N05/N09/N14/N17/N23) | 成本监控 + 项目需求校验 + 预算分配 + 降级触发 + 合规检查 |
+| **Evolution Engine** | 后台（四模式） | 每日反思→每周 prompt 进化→持续 RAG 管理→按条件 LoRA 训练 |
 
 ---
 

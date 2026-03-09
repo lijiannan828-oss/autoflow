@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-namesrv
+  namespace: default
+  labels:
+    app: rocketmq-namesrv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-namesrv
+  template:
+    metadata:
+      labels:
+        app: rocketmq-namesrv
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "10.0.0.116"
+      containers:
+        - name: namesrv
+          image: autoflow-cn-shanghai.cr.volces.com/autoflow/rocketmq:5.3.1
+          command: ["sh", "-c", "/home/rocketmq/rocketmq-5.3.1/bin/mqnamesrv"]
+          ports:
+            - containerPort: 9876
+              name: namesrv
+          env:
+            - name: HEAP_OPTS
+              value: "-Xms256m -Xmx512m -Xmn128m"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
+          readinessProbe:
+            tcpSocket:
+              port: 9876
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 9876
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      imagePullSecrets:
+        - name: volc-cr-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rocketmq-broker
+  namespace: default
+  labels:
+    app: rocketmq-broker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rocketmq-broker
+  template:
+    metadata:
+      labels:
+        app: rocketmq-broker
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "10.1.11.110"
+      containers:
+        - name: broker
+          image: autoflow-cn-shanghai.cr.volces.com/autoflow/rocketmq:5.3.1
+          command: ["sh", "-c", "/home/rocketmq/rocketmq-5.3.1/bin/mqbroker -n rocketmq-namesrv.default.svc.cluster.local:9876 --enable-proxy"]
+          ports:
+            - containerPort: 10911
+              name: broker
+            - containerPort: 8081
+              name: proxy
+          env:
+            - name: NAMESRV_ADDR
+              value: "rocketmq-namesrv.default.svc.cluster.local:9876"
+            - name: HEAP_OPTS
+              value: "-Xms512m -Xmx1g -Xmn256m -XX:MaxDirectMemorySize=512m"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "3Gi"
+          readinessProbe:
+            tcpSocket:
+              port: 8081
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8081
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      imagePullSecrets:
+        - name: volc-cr-secret

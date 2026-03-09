@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: comfyui
+  namespace: default
+  labels:
+    app: comfyui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: comfyui
+  template:
+    metadata:
+      labels:
+        app: comfyui
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "10.1.11.110"
+      containers:
+        - name: comfyui
+          image: autoflow-cn-shanghai.cr.volces.com/autoflow/comfyui:v1.0
+          ports:
+            - containerPort: 8188
+              name: http
+          env:
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: "all"
+          resources:
+            requests:
+              cpu: "2"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: "32Gi"
+              nvidia.com/gpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8188
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8188
+            initialDelaySeconds: 120
+            periodSeconds: 30
+          volumeMounts:
+            - name: models
+              mountPath: /app/ComfyUI/models
+            - name: output
+              mountPath: /app/ComfyUI/output
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: comfyui-models
+        - name: output
+          hostPath:
+            path: /data/comfyui/output
+            type: DirectoryOrCreate
+      imagePullSecrets:
+        - name: volc-cr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: comfyui
+  namespace: default
+  labels:
+    app: comfyui
+spec:
+  type: ClusterIP
+  selector:
+    app: comfyui
+  ports:
+    - name: http
+      port: 8188
+      targetPort: 8188

@@ -25,6 +25,8 @@ def register_all_handlers() -> list[str]:
         ("freeze_handlers", "backend.orchestrator.handlers.freeze_handlers"),
         ("analysis_handlers", "backend.orchestrator.handlers.analysis_handlers"),
         ("av_handlers", "backend.orchestrator.handlers.av_handlers"),
+        ("voice_handler", "backend.orchestrator.handlers.voice_handler"),
+        ("tone_handler", "backend.orchestrator.handlers.tone_handler"),
     ]
 
     for name, module_path in modules:

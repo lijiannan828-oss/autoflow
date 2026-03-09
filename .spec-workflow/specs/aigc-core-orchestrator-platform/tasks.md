@@ -22,9 +22,9 @@
 
 ### [ ] T0.2 待开通 — MVP-0 必需（进行中）
 
-- [x] ~~MQ~~ → **MVP-0 使用 Redis 作为 Celery broker**（已部署），无需额外开通 MQ 服务
-  - Topics 通过 Celery queue name 实现：`node-run-events`, `model-callbacks`, `return-tickets`
-  - _MVP-1 可选_：如需 DLQ/消息优先级，迁移至 RabbitMQ
+- [ ] **RocketMQ（火山引擎托管版）**：生产异步总线（`node-run-events`, `model-callbacks`, `return-tickets`）
+  - 要求：Topic/ConsumerGroup 规划、重试与 DLQ 策略、幂等消费键
+  - _说明_：不再以 Celery+Redis 作为主链路消息总线
 - [x] **TOS（对象存储）**：Bucket `autoflow-media-2102718571-cn-shanghai`（已可用），生命周期规则，CORS
   - _阻塞_：T5（产物存储）、TM.2（模型产物）
 - [ ] **CLB/ALB**：VKE Ingress 外部入口
@@ -73,9 +73,9 @@
 
 ### [ ] TM.3 LLM 推理服务
 
-- [ ] 方案 A（自部署 vLLM）：Qwen3-72B / DeepSeek-R1 / Llama-3.3-70B
-- [ ] 方案 B（API）：火山方舟 / 第三方
-- [ ] 外部 API 配置：Claude / GPT / Gemini（质检多模型投票）
+- [ ] 主力方案（v1）：闭源 API（Gemini 3.1 / Claude Opus 4.6 / GPT 5.4）接入与路由
+- [ ] 兜底方案：自部署轻量模型（如 Qwen3-32B）用于离线/降级场景
+- [ ] 完成模型路由策略：主力优先、失败降级、成本阈值触发切换
 - _交付物_：LLM API 可调用
 
 ### [ ] TM.4 音频模型部署
@@ -101,17 +101,17 @@
 - 搭建 LangGraph Supervisor Agent 框架
 - 实现 Supervisor → Worker Agent 任务分发机制
 - 定义 6 类 Worker Agent 接口规范
-- 集成 Celery + Redis broker 用于异步回调
+- 集成 RocketMQ 事件驱动（任务分发/回调/重跑触发）
 - _交付物_：LangGraph 骨架 + Agent 接口定义 + 最小可运行 demo
 
 ### [x] T2 Node Registry 与 DAG 校验（已完成）
 
-- 建立 `node_registry` 表与 **26 节点种子数据**（对齐选型表）
+- 建立 `node_registry` 表与 **28 节点种子数据**（含 N07b、N16b）
 - 每节点配置：agent_role、model_config、comfyui_nodes、rag_sources、quality_threshold
 - DAG 拓扑排序与依赖校验
 - _交付物_：Registry 表 + 种子数据 + 拓扑校验通过
 - 完成说明（截至 2026-03-08）：
-  - `seed_node_registry()` 已落地并维护 26 节点幂等种子（N01~N26）
+  - `seed_node_registry()` 已落地并维护 28 节点幂等种子（含 N07b、N16b）
   - graph 拓扑与依赖约束已固化到 `topology.py` 并有 `test_topology_sanity()` 覆盖
   - `compile_pipeline()` 与运行时接线已持续通过 smoke（受本地 `langgraph` 安装状态影响完整编译测试）
 
@@ -175,12 +175,12 @@
 
 ### [ ] T7 RAG 知识库服务
 
-- 部署 Chroma 向量库（VKE Pod 或独立实例）
+- 部署 Qdrant 向量库（VKE Pod 或独立实例）
 - 建立 `rag_collections` 元数据表
 - 实现知识入库：人工上传 + 系统自动沉淀
 - 实现检索接口：按 `node_registry.rag_sources` 配置检索
 - Worker Agent 调用前自动注入 RAG 上下文
-- _交付物_：Chroma 服务 + 入库/检索 API + 初始知识库
+- _交付物_：Qdrant 服务 + 入库/检索 API + 初始知识库
 
 ### [ ] T8 Worker Agent 实现（按管线阶段拆解）
 
@@ -192,13 +192,13 @@
 | 节点 | Agent | 实现内容 | 依赖 |
 |---|---|---|---|
 | N01 | Script Analyst | 剧本结构化解析：角色/场景/情感/对白/动作提取 | TM.3（LLM） |
-| N02 | Director | 拆集拆镜 + 拍摄指令生成 | TM.3（LLM），T13（出场索引） |
-| N03 | Quality Guardian | 分镜质检：多模型投票评分，<8.0 自动打回→N02 | TM.3（LLM 多模型），T6 |
-| N04 | Director | 视觉元素提取（角色外观/场景/道具描述） | TM.3（LLM） |
-| N05 | Director | 镜头分级（S0/S1/S2）→ 决定下游模型选择 | TM.3（LLM） |
+| N02 | Shot Designer | 拆集拆镜 + 拍摄指令生成 | TM.3（LLM），T13（出场索引） |
+| N03 | Quality Inspector | 分镜质检：多模型投票评分，<8.0 自动打回→N02 | TM.3（LLM 多模型），T6 |
+| N04 | Shot Designer | 分镜定稿（符合质检意见） | TM.3（LLM） |
+| N05 | Shot Designer | 镜头分级（S0/S1/S2）→ 决定下游模型选择 | TM.3（LLM） |
 
 - _验收_：输入一段剧本 → N01~N05 全部执行成功 → 产出结构化 shot 列表 + 视觉元素 + 镜头分级
-- _交付物_：Script Analyst Agent + Director Agent（脚本子集）+ Quality Guardian Agent（N03）
+- _交付物_：Script Analyst Agent + Shot Designer Agent（脚本子集）+ Quality Inspector Agent（N03）
 
 #### [ ] T8.2 美术阶段（N06~N09）
 
@@ -217,26 +217,27 @@
 | 节点 | Agent | 实现内容 | 依赖 |
 |---|---|---|---|
 | N10 | Visual Director | 关键帧生成：LTXVividGuide + ControlNet + OpenPose | TM.2（ComfyUI） |
-| N11 | Quality Guardian | 关键帧质检：ReActor + FaceID Checker，加权总分<7.5→打回 N10 | TM.2（ComfyUI），T6 |
-| N12 | Storyboard Planner | 跨镜头连续性检查（角色/场景/光影一致性） | TM.3（LLM） |
+| N11 | Quality Inspector | 关键帧质检：ReActor + FaceID Checker，加权总分<7.5→打回 N10 | TM.2（ComfyUI），T6 |
+| N12 | Quality Inspector | 跨镜头连续性检查（角色/场景/光影一致性） | TM.3（LLM） |
 | N13 | Visual Director | 关键帧定稿固化：FireRed Edit | TM.2（ComfyUI），T5 |
 
 - _验收_：输入美术基线 + shot 列表 → N10~N13 全部执行 → 产出质检通过的连续关键帧序列
-- _交付物_：Visual Director Agent（关键帧子集）+ Quality Guardian Agent（N11）+ Storyboard Planner Agent（N12）
+- _交付物_：Visual Director Agent（关键帧子集）+ Quality Inspector Agent（N11/N12）
 
 #### [ ] T8.4 视频阶段（N14~N19）
 
 | 节点 | Agent | 实现内容 | 依赖 |
 |---|---|---|---|
 | N14 | Visual Director | 视频生成：LTXVividGuide Multi + HuMo + 模型路由（按 S0/S1/S2） | TM.2（ComfyUI） |
-| N15 | Quality Guardian | 视频质检：ReActor + Physics Checker，多维度不通过→打回 N14 | TM.2（ComfyUI），T6 |
-| N16 | Storyboard Planner | 节奏连续性分析（转场节拍/时长合理性） | TM.3（LLM） |
+| N15 | Quality Inspector | 视频质检：ReActor + Physics Checker，多维度不通过→打回 N14 | TM.2（ComfyUI），T6 |
+| N16 | Shot Designer | 节奏连续性分析（转场节拍/时长合理性） | TM.3（LLM） |
+| N16b | Shot Designer + Compositor | 影调一致化与节奏调整（更新时间轴） | TM.2（FFmpeg/剪辑链路） |
 | N17 | Visual Director | 视频定稿固化 | T5 |
 | N18 | **Gate Stage2** | 质检员逐 shot 审核 → 已在 T4 实现 | T4 |
 | N19 | — | 视觉整体定稿固化 | T5 |
 
 - _验收_：输入关键帧序列 → N14~N19 全部执行 → 产出质检通过的视频片段 + 通过 shot 级审核
-- _交付物_：Visual Director Agent（视频子集）+ Quality Guardian Agent（N15）+ Storyboard Planner Agent（N16）
+- _交付物_：Visual Director Agent（视频子集）+ Quality Inspector Agent（N15）+ Shot Designer/Compositor（N16/N16b）
 
 #### [ ] T8.5 视听阶段（N20~N22）
 
@@ -253,13 +254,13 @@
 
 | 节点 | Agent | 实现内容 | 依赖 |
 |---|---|---|---|
-| N23 | Director | 成片合成：VHS_VideoCombine（字幕 + 多轨合成） | TM.2（ComfyUI） |
+| N23 | Compositor | 成片合成：FFmpeg（主）+ VHS_VideoCombine（辅） | TM.2（ComfyUI） |
 | N24 | **Gate Stage4** | 串行 3 步审核 → 已在 T4 实现 | T4 |
-| N25 | Director | 成片定稿固化 → 入资产池 | T5 |
-| N26 | Director | TikTok/飞书推送 | — |
+| N25 | Compositor | 成片定稿固化 → 入资产池 | T5 |
+| N26 | Compositor | TikTok/飞书推送 | — |
 
 - _验收_：输入视听产物 → N23~N26 全部执行 → 产出可发布成片 + 推送成功
-- _交付物_：Director Agent（成片子集）
+- _交付物_：Compositor Agent（成片子集）
 
 ### [ ] T9 Model Gateway Adapter
 
@@ -413,16 +414,16 @@
 
 | 阶段 | 任务 | 目标 |
 |---|---|---|
-| 基础设施 | T0.2 | TOS + CLB + MinIO（MQ 已用 Redis 替代） |
+| 基础设施 | T0.2 | RocketMQ + TOS + CLB + MinIO |
 | 基础设施 | T0.4 | 连通性验证 |
 | 模型部署 | TM.1~TM.5 | GPU 节点 + ComfyUI + LLM + 音频 + 监控 |
 | 编排核心 | T1 | LangGraph Orchestrator 骨架 |
-| 编排核心 | T2 | Node Registry（26 节点种子） |
+| 编排核心 | T2 | Node Registry（28 节点种子，含 N07b/N16b） |
 | 编排核心 | T3 | Run/NodeRun 状态机 |
 | 编排核心 | T4 | 4 Gate 挂起/放行 |
 | 编排核心 | T5 | Artifact 索引与固化 |
 | 编排核心 | T6 | 质检自动打回 |
-| 智能体 | T7 | RAG 知识库（Chroma） |
+| 智能体 | T7 | RAG 知识库（Qdrant） |
 | 智能体 | T8.1~T8.6 | 6 阶段 Worker Agent（脚本→美术→关键帧→视频→视听→成片） |
 | 智能体 | T9 | Model Gateway Adapter |
 | 回炉 | T10 | ReturnTicket + RCA |

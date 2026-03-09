@@ -1838,3 +1838,567 @@
  GET /admin/debug 200 in 14ms (compile: 2ms, render: 12ms)
  GET /api/orchestrator/acceptance 200 in 26.6s (compile: 1409µs, render: 26.6s)
  GET /api/orchestrator/acceptance 200 in 28.1s (compile: 549µs, render: 28.1s)
+✓ Compiled in 31ms
+✓ Compiled in 24ms
+ GET /admin/sprint 200 in 61ms (compile: 40ms, render: 21ms)
+ GET /admin/sprint 200 in 91ms (compile: 3ms, render: 88ms)
+ GET /admin/sprint 200 in 46ms (compile: 3ms, render: 43ms)
+✓ Compiled in 25ms
+✓ Compiled in 27ms
+✓ Compiled in 41ms
+✓ Compiled in 27ms
+✓ Compiled in 32ms
+✓ Compiled in 29ms
+✓ Compiled in 35ms
+✓ Compiled in 29ms
+✓ Compiled in 29ms
+✓ Compiled in 44ms
+✓ Compiled in 34ms
+✓ Compiled in 29ms
+✓ Compiled in 28ms
+✓ Compiled in 22ms
+✓ Compiled in 26ms
+ GET /admin/sprint 200 in 124ms (compile: 26ms, render: 98ms)
+ GET /admin/sprint 200 in 33ms (compile: 1030µs, render: 32ms)
+ GET /admin/sprint 200 in 29ms (compile: 1190µs, render: 28ms)
+ GET /admin/sprint 200 in 51ms (compile: 1557µs, render: 49ms)
+✓ Compiled in 22ms
+✓ Compiled in 31ms
+✓ Compiled in 36ms
+✓ Compiled in 27ms
+✓ Compiled in 31ms
+✓ Compiled in 44ms
+✓ Compiled in 29ms
+ GET /admin/sprint 200 in 113ms (compile: 32ms, render: 81ms)
+✓ Compiled in 25ms
+✓ Compiled in 35ms
+✓ Compiled in 26ms
+✓ Compiled in 27ms
+✓ Compiled in 31ms
+✓ Compiled in 25ms
+✓ Compiled in 25ms
+✓ Compiled in 25ms
+✓ Compiled in 28ms
+✓ Compiled in 23ms
+ GET /admin/sprint 200 in 125ms (compile: 42ms, render: 83ms)
+✓ Compiled in 26ms
+✓ Compiled in 36ms
+✓ Compiled in 31ms
+✓ Compiled in 29ms
+✓ Compiled in 29ms
+✓ Compiled in 27ms
+✓ Compiled in 31ms
+✓ Compiled in 29ms
+✓ Compiled in 28ms
+✓ Compiled in 31ms
+✓ Compiled in 27ms
+✓ Compiled in 29ms
+✓ Compiled in 30ms
+✓ Compiled in 28ms
+✓ Compiled in 28ms
+✓ Compiled in 36ms
+✓ Compiled in 31ms
+✓ Compiled in 26ms
+✓ Compiled in 29ms
+✓ Compiled in 28ms
+ GET /admin/sprint 200 in 134ms (compile: 43ms, render: 91ms)
+✓ Compiled in 33ms
+✓ Compiled in 26ms
+✓ Compiled in 45ms
+✓ Compiled in 27ms
+ GET /admin/sprint 200 in 61ms (compile: 28ms, render: 33ms)
+ GET /admin/sprint 200 in 24ms (compile: 3ms, render: 21ms)
+ GET /admin/sprint 200 in 22ms (compile: 892µs, render: 21ms)
+ GET /admin/sprint 200 in 30ms (compile: 892µs, render: 29ms)
+ GET /admin/sprint 200 in 22ms (compile: 726µs, render: 21ms)
+ GET /admin/sprint 200 in 21ms (compile: 895µs, render: 20ms)
+ GET /admin/sprint 200 in 22ms (compile: 697µs, render: 21ms)
+ GET /admin/sprint 200 in 25ms (compile: 761µs, render: 24ms)
+ GET /admin/sprint 200 in 30ms (compile: 659µs, render: 29ms)
+ GET /admin/sprint 200 in 29ms (compile: 960µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 595µs, render: 29ms)
+ GET /admin/sprint 200 in 34ms (compile: 780µs, render: 33ms)
+ GET /admin/sprint 200 in 31ms (compile: 774µs, render: 30ms)
+ GET /admin/sprint 200 in 31ms (compile: 776µs, render: 30ms)
+ GET /admin/sprint 200 in 31ms (compile: 6ms, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 852µs, render: 25ms)
+ GET /admin/sprint 200 in 29ms (compile: 762µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 930µs, render: 28ms)
+ GET /admin/sprint 200 in 27ms (compile: 619µs, render: 26ms)
+ GET /admin/sprint 200 in 21ms (compile: 3ms, render: 18ms)
+ GET /admin/sprint 200 in 25ms (compile: 687µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 564µs, render: 25ms)
+ GET /admin/sprint 200 in 25ms (compile: 660µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 507µs, render: 24ms)
+ GET /admin/sprint 200 in 21ms (compile: 676µs, render: 21ms)
+ GET /admin/sprint 200 in 24ms (compile: 703µs, render: 23ms)
+ GET /admin/sprint 200 in 20ms (compile: 530µs, render: 19ms)
+ GET /admin/sprint 200 in 20ms (compile: 1043µs, render: 19ms)
+ GET /admin/sprint 200 in 26ms (compile: 505µs, render: 25ms)
+ GET /admin/sprint 200 in 24ms (compile: 820µs, render: 23ms)
+ GET /admin/sprint 200 in 29ms (compile: 571µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 703µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 815µs, render: 28ms)
+ GET /admin/sprint 200 in 30ms (compile: 690µs, render: 29ms)
+ GET /admin/sprint 200 in 26ms (compile: 694µs, render: 26ms)
+ GET /admin/sprint 200 in 29ms (compile: 776µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 797µs, render: 29ms)
+ GET /admin/sprint 200 in 24ms (compile: 718µs, render: 23ms)
+ GET /admin/sprint 200 in 24ms (compile: 634µs, render: 23ms)
+ GET /admin/sprint 200 in 26ms (compile: 758µs, render: 25ms)
+ GET /admin/sprint 200 in 29ms (compile: 1063µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 1137µs, render: 28ms)
+ GET /admin/sprint 200 in 24ms (compile: 823µs, render: 23ms)
+ GET /admin/sprint 200 in 28ms (compile: 750µs, render: 28ms)
+ GET /admin/sprint 200 in 26ms (compile: 735µs, render: 25ms)
+ GET /admin/sprint 200 in 30ms (compile: 1102µs, render: 29ms)
+ GET /admin/sprint 200 in 29ms (compile: 737µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 1037µs, render: 28ms)
+ GET /admin/sprint 200 in 31ms (compile: 772µs, render: 30ms)
+ GET /admin/sprint 200 in 27ms (compile: 748µs, render: 26ms)
+ GET /admin/sprint 200 in 30ms (compile: 993µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 739µs, render: 29ms)
+ GET /admin/sprint 200 in 28ms (compile: 964µs, render: 27ms)
+ GET /admin/sprint 200 in 29ms (compile: 676µs, render: 28ms)
+ GET /admin/sprint 200 in 25ms (compile: 739µs, render: 25ms)
+ GET /admin/sprint 200 in 28ms (compile: 686µs, render: 27ms)
+ GET /admin/sprint 200 in 29ms (compile: 627µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 723µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 715µs, render: 28ms)
+ GET /admin/sprint 200 in 26ms (compile: 1276µs, render: 25ms)
+ GET /admin/sprint 200 in 31ms (compile: 638µs, render: 30ms)
+ GET /admin/sprint 200 in 32ms (compile: 842µs, render: 31ms)
+ GET /admin/sprint 200 in 32ms (compile: 736µs, render: 31ms)
+ GET /admin/sprint 200 in 31ms (compile: 915µs, render: 30ms)
+ GET /admin/sprint 200 in 27ms (compile: 819µs, render: 26ms)
+ GET /admin/sprint 200 in 30ms (compile: 703µs, render: 30ms)
+ GET /admin/sprint 200 in 30ms (compile: 686µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 956µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 862µs, render: 29ms)
+ GET /admin/sprint 200 in 26ms (compile: 843µs, render: 25ms)
+ GET /admin/sprint 200 in 29ms (compile: 591µs, render: 28ms)
+ GET /admin/sprint 200 in 28ms (compile: 727µs, render: 27ms)
+ GET /admin/sprint 200 in 26ms (compile: 847µs, render: 25ms)
+ GET /admin/sprint 200 in 25ms (compile: 538µs, render: 24ms)
+ GET /admin/sprint 200 in 21ms (compile: 547µs, render: 21ms)
+ GET /admin/sprint 200 in 17ms (compile: 539µs, render: 16ms)
+ GET /admin/sprint 200 in 25ms (compile: 598µs, render: 25ms)
+ GET /admin/sprint 200 in 27ms (compile: 486µs, render: 26ms)
+ GET /admin/sprint 200 in 28ms (compile: 631µs, render: 27ms)
+ GET /admin/sprint 200 in 25ms (compile: 734µs, render: 24ms)
+ GET /admin/sprint 200 in 26ms (compile: 676µs, render: 26ms)
+ GET /admin/sprint 200 in 20ms (compile: 672µs, render: 20ms)
+ GET /admin/sprint 200 in 26ms (compile: 623µs, render: 25ms)
+ GET /admin/sprint 200 in 28ms (compile: 491µs, render: 27ms)
+ GET /admin/sprint 200 in 26ms (compile: 653µs, render: 25ms)
+ GET /admin/sprint 200 in 30ms (compile: 732µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 780µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 795µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 730µs, render: 29ms)
+ GET /admin/sprint 200 in 26ms (compile: 763µs, render: 26ms)
+ GET /admin/sprint 200 in 30ms (compile: 777µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 704µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 769µs, render: 29ms)
+ GET /admin/sprint 200 in 29ms (compile: 755µs, render: 28ms)
+ GET /admin/sprint 200 in 26ms (compile: 744µs, render: 25ms)
+ GET /admin/sprint 200 in 27ms (compile: 693µs, render: 26ms)
+ GET /admin/sprint 200 in 26ms (compile: 681µs, render: 25ms)
+ GET /admin/sprint 200 in 20ms (compile: 796µs, render: 19ms)
+ GET /admin/sprint 200 in 20ms (compile: 510µs, render: 20ms)
+ GET /admin/sprint 200 in 23ms (compile: 664µs, render: 23ms)
+ GET /admin/sprint 200 in 28ms (compile: 682µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 817µs, render: 28ms)
+ GET /admin/sprint 200 in 24ms (compile: 692µs, render: 23ms)
+ GET /admin/sprint 200 in 31ms (compile: 624µs, render: 30ms)
+ GET /admin/sprint 200 in 27ms (compile: 803µs, render: 26ms)
+ GET /admin/sprint 200 in 32ms (compile: 950µs, render: 31ms)
+ GET /admin/sprint 200 in 34ms (compile: 713µs, render: 33ms)
+ GET /admin/sprint 200 in 36ms (compile: 685µs, render: 35ms)
+ GET /admin/sprint 200 in 38ms (compile: 1024µs, render: 37ms)
+ GET /admin/sprint 200 in 34ms (compile: 918µs, render: 33ms)
+ GET /admin/sprint 200 in 38ms (compile: 988µs, render: 37ms)
+ GET /admin/sprint 200 in 38ms (compile: 964µs, render: 37ms)
+ GET /admin/sprint 200 in 30ms (compile: 882µs, render: 29ms)
+ GET /admin/sprint 200 in 38ms (compile: 912µs, render: 37ms)
+ GET /admin/sprint 200 in 34ms (compile: 744µs, render: 33ms)
+ GET /admin/sprint 200 in 39ms (compile: 1086µs, render: 38ms)
+ GET /admin/sprint 200 in 39ms (compile: 834µs, render: 39ms)
+ GET /admin/sprint 200 in 39ms (compile: 1047µs, render: 38ms)
+ GET /admin/sprint 200 in 38ms (compile: 872µs, render: 37ms)
+ GET /admin/sprint 200 in 33ms (compile: 859µs, render: 33ms)
+ GET /admin/sprint 200 in 79ms (compile: 1093µs, render: 78ms)
+ GET /admin/sprint 200 in 71ms (compile: 829µs, render: 71ms)
+ GET /admin/sprint 200 in 70ms (compile: 807µs, render: 70ms)
+ GET /admin/sprint 200 in 30ms (compile: 1339µs, render: 28ms)
+ GET /admin/sprint 200 in 25ms (compile: 931µs, render: 24ms)
+ GET /admin/sprint 200 in 28ms (compile: 1060µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 698µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 743µs, render: 26ms)
+ GET /admin/sprint 200 in 22ms (compile: 764µs, render: 21ms)
+ GET /admin/sprint 200 in 23ms (compile: 716µs, render: 22ms)
+ GET /admin/sprint 200 in 27ms (compile: 529µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 610µs, render: 27ms)
+ GET /admin/sprint 200 in 29ms (compile: 434µs, render: 29ms)
+ GET /admin/sprint 200 in 28ms (compile: 756µs, render: 27ms)
+ GET /admin/sprint 200 in 19ms (compile: 770µs, render: 18ms)
+ GET /admin/sprint 200 in 17ms (compile: 706µs, render: 17ms)
+ GET /admin/sprint 200 in 19ms (compile: 530µs, render: 19ms)
+ GET /admin/sprint 200 in 19ms (compile: 713µs, render: 18ms)
+ GET /admin/sprint 200 in 14ms (compile: 732µs, render: 13ms)
+ GET /admin/sprint 200 in 6ms (compile: 950µs, render: 5ms)
+ GET /admin/sprint 200 in 31ms (compile: 23ms, render: 8ms)
+ GET /admin/sprint 200 in 59ms (compile: 32ms, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 882µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 702µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 1041µs, render: 26ms)
+ GET /admin/sprint 200 in 22ms (compile: 780µs, render: 22ms)
+ GET /admin/sprint 200 in 25ms (compile: 627µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 588µs, render: 26ms)
+ GET /admin/sprint 200 in 28ms (compile: 444µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 806µs, render: 26ms)
+ GET /admin/sprint 200 in 24ms (compile: 771µs, render: 23ms)
+ GET /admin/sprint 200 in 27ms (compile: 659µs, render: 26ms)
+ GET /admin/sprint 200 in 25ms (compile: 547µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 689µs, render: 25ms)
+ GET /admin/sprint 200 in 25ms (compile: 601µs, render: 24ms)
+ GET /admin/sprint 200 in 16ms (compile: 538µs, render: 16ms)
+ GET /admin/sprint 200 in 24ms (compile: 540µs, render: 24ms)
+ GET /admin/sprint 200 in 19ms (compile: 503µs, render: 18ms)
+ GET /admin/sprint 200 in 19ms (compile: 607µs, render: 19ms)
+ GET /admin/sprint 200 in 19ms (compile: 495µs, render: 19ms)
+ GET /admin/sprint 200 in 21ms (compile: 800µs, render: 21ms)
+ GET /admin/sprint 200 in 25ms (compile: 875µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 672µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 401µs, render: 25ms)
+ GET /admin/sprint 200 in 28ms (compile: 778µs, render: 27ms)
+ GET /admin/sprint 200 in 25ms (compile: 602µs, render: 24ms)
+ GET /admin/sprint 200 in 29ms (compile: 475µs, render: 29ms)
+ GET /admin/sprint 200 in 29ms (compile: 895µs, render: 28ms)
+ GET /admin/sprint 200 in 26ms (compile: 1047µs, render: 25ms)
+ GET /admin/sprint 200 in 24ms (compile: 680µs, render: 23ms)
+ GET /admin/sprint 200 in 19ms (compile: 857µs, render: 18ms)
+ GET /admin/sprint 200 in 24ms (compile: 478µs, render: 23ms)
+ GET /admin/sprint 200 in 26ms (compile: 435µs, render: 25ms)
+ GET /admin/sprint 200 in 27ms (compile: 440µs, render: 27ms)
+ GET /admin/sprint 200 in 24ms (compile: 668µs, render: 23ms)
+ GET /admin/sprint 200 in 24ms (compile: 721µs, render: 24ms)
+ GET /admin/sprint 200 in 27ms (compile: 766µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 891µs, render: 26ms)
+ GET /admin/sprint 200 in 22ms (compile: 620µs, render: 21ms)
+ GET /admin/sprint 200 in 22ms (compile: 569µs, render: 21ms)
+ GET /admin/sprint 200 in 24ms (compile: 715µs, render: 24ms)
+ GET /admin/sprint 200 in 26ms (compile: 954µs, render: 25ms)
+ GET /admin/sprint 200 in 27ms (compile: 1133µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 585µs, render: 26ms)
+ GET /admin/sprint 200 in 28ms (compile: 606µs, render: 27ms)
+ GET /admin/sprint 200 in 25ms (compile: 657µs, render: 24ms)
+ GET /admin/sprint 200 in 27ms (compile: 676µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 759µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 643µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 683µs, render: 26ms)
+ GET /admin/sprint 200 in 24ms (compile: 696µs, render: 24ms)
+ GET /admin/sprint 200 in 27ms (compile: 743µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 643µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 586µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 638µs, render: 27ms)
+ GET /admin/sprint 200 in 25ms (compile: 693µs, render: 24ms)
+ GET /admin/sprint 200 in 27ms (compile: 655µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 711µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 647µs, render: 27ms)
+ GET /admin/sprint 200 in 26ms (compile: 606µs, render: 26ms)
+ GET /admin/sprint 200 in 19ms (compile: 693µs, render: 18ms)
+ GET /admin/sprint 200 in 27ms (compile: 630µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 772µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 957µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 779µs, render: 28ms)
+ GET /admin/sprint 200 in 25ms (compile: 656µs, render: 24ms)
+ GET /admin/sprint 200 in 29ms (compile: 603µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 587µs, render: 28ms)
+ GET /admin/sprint 200 in 28ms (compile: 699µs, render: 28ms)
+ GET /admin/sprint 200 in 30ms (compile: 703µs, render: 29ms)
+ GET /admin/sprint 200 in 27ms (compile: 782µs, render: 26ms)
+ GET /admin/sprint 200 in 30ms (compile: 595µs, render: 30ms)
+ GET /admin/sprint 200 in 30ms (compile: 708µs, render: 29ms)
+ GET /admin/sprint 200 in 24ms (compile: 693µs, render: 23ms)
+ GET /admin/sprint 200 in 24ms (compile: 883µs, render: 23ms)
+ GET /admin/sprint 200 in 21ms (compile: 777µs, render: 20ms)
+ GET /admin/sprint 200 in 28ms (compile: 1041µs, render: 27ms)
+ GET /admin/sprint 200 in 22ms (compile: 1578µs, render: 20ms)
+ GET /admin/sprint 200 in 25ms (compile: 992µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 661µs, render: 24ms)
+ GET /admin/sprint 200 in 21ms (compile: 919µs, render: 20ms)
+ GET /admin/sprint 200 in 26ms (compile: 453µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 484µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 479µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 741µs, render: 26ms)
+ GET /admin/sprint 200 in 23ms (compile: 866µs, render: 22ms)
+ GET /admin/sprint 200 in 25ms (compile: 663µs, render: 25ms)
+ GET /admin/sprint 200 in 25ms (compile: 698µs, render: 25ms)
+ GET /admin/sprint 200 in 20ms (compile: 581µs, render: 20ms)
+ GET /admin/sprint 200 in 27ms (compile: 777µs, render: 26ms)
+ GET /admin/sprint 200 in 24ms (compile: 616µs, render: 23ms)
+ GET /admin/sprint 200 in 29ms (compile: 638µs, render: 28ms)
+ GET /admin/sprint 200 in 30ms (compile: 719µs, render: 29ms)
+ GET /admin/sprint 200 in 29ms (compile: 554µs, render: 29ms)
+ GET /admin/sprint 200 in 28ms (compile: 719µs, render: 27ms)
+ GET /admin/sprint 200 in 24ms (compile: 763µs, render: 23ms)
+ GET /admin/sprint 200 in 18ms (compile: 548µs, render: 17ms)
+ GET /admin/sprint 200 in 25ms (compile: 576µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 823µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 717µs, render: 25ms)
+ GET /admin/sprint 200 in 22ms (compile: 844µs, render: 22ms)
+ GET /admin/sprint 200 in 26ms (compile: 529µs, render: 26ms)
+ GET /admin/sprint 200 in 26ms (compile: 804µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 599µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 599µs, render: 26ms)
+ GET /admin/sprint 200 in 23ms (compile: 601µs, render: 23ms)
+ GET /admin/sprint 200 in 27ms (compile: 597µs, render: 26ms)
+ GET /admin/sprint 200 in 26ms (compile: 781µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 873µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 547µs, render: 26ms)
+ GET /admin/sprint 200 in 23ms (compile: 592µs, render: 23ms)
+ GET /admin/sprint 200 in 27ms (compile: 785µs, render: 26ms)
+ GET /admin/sprint 200 in 25ms (compile: 543µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 516µs, render: 25ms)
+ GET /admin/sprint 200 in 27ms (compile: 559µs, render: 26ms)
+ GET /admin/sprint 200 in 23ms (compile: 525µs, render: 23ms)
+ GET /admin/sprint 200 in 27ms (compile: 458µs, render: 26ms)
+ GET /admin/sprint 200 in 21ms (compile: 735µs, render: 21ms)
+ GET /admin/sprint 200 in 24ms (compile: 530µs, render: 24ms)
+ GET /admin/sprint 200 in 37ms (compile: 563µs, render: 36ms)
+ GET /admin/sprint 200 in 39ms (compile: 954µs, render: 38ms)
+ GET /admin/sprint 200 in 43ms (compile: 1415µs, render: 42ms)
+ GET /admin/sprint 200 in 41ms (compile: 1471µs, render: 39ms)
+ GET /admin/sprint 200 in 38ms (compile: 902µs, render: 37ms)
+ GET /admin/sprint 200 in 34ms (compile: 1278µs, render: 33ms)
+ GET /admin/sprint 200 in 22ms (compile: 901µs, render: 21ms)
+ GET /admin/sprint 200 in 32ms (compile: 850µs, render: 31ms)
+ GET /admin/sprint 200 in 26ms (compile: 738µs, render: 25ms)
+ GET /admin/sprint 200 in 24ms (compile: 1313µs, render: 23ms)
+ GET /admin/sprint 200 in 22ms (compile: 944µs, render: 21ms)
+ GET /admin/sprint 200 in 23ms (compile: 870µs, render: 22ms)
+ GET /admin/sprint 200 in 18ms (compile: 791µs, render: 18ms)
+ GET /admin/sprint 200 in 22ms (compile: 998µs, render: 21ms)
+ GET /admin/sprint 200 in 42ms (compile: 655µs, render: 41ms)
+ GET /admin/sprint 200 in 47ms (compile: 753µs, render: 46ms)
+ GET /admin/sprint 200 in 47ms (compile: 984µs, render: 46ms)
+ GET /admin/sprint 200 in 57ms (compile: 815µs, render: 56ms)
+ GET /admin/sprint 200 in 45ms (compile: 975µs, render: 44ms)
+ GET /admin/sprint 200 in 35ms (compile: 1083µs, render: 34ms)
+ GET /admin/sprint 200 in 36ms (compile: 1493µs, render: 35ms)
+ GET /admin/sprint 200 in 38ms (compile: 1075µs, render: 36ms)
+ GET /admin/sprint 200 in 29ms (compile: 1621µs, render: 27ms)
+ GET /admin/sprint 200 in 19ms (compile: 2ms, render: 17ms)
+ GET /admin/sprint 200 in 10ms (compile: 1046µs, render: 9ms)
+ GET /admin/sprint 200 in 48ms (compile: 17ms, render: 31ms)
+ GET /admin/sprint 200 in 29ms (compile: 880µs, render: 28ms)
+ GET /admin/sprint 200 in 27ms (compile: 750µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 1269µs, render: 26ms)
+ GET /admin/sprint 200 in 26ms (compile: 616µs, render: 26ms)
+ GET /admin/sprint 200 in 26ms (compile: 502µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 447µs, render: 25ms)
+ GET /admin/sprint 200 in 22ms (compile: 510µs, render: 21ms)
+ GET /admin/sprint 200 in 25ms (compile: 457µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 485µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 442µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 475µs, render: 24ms)
+ GET /admin/sprint 200 in 22ms (compile: 644µs, render: 21ms)
+ GET /admin/sprint 200 in 28ms (compile: 477µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 652µs, render: 27ms)
+ GET /admin/sprint 200 in 29ms (compile: 513µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 827µs, render: 29ms)
+ GET /admin/sprint 200 in 25ms (compile: 718µs, render: 24ms)
+ GET /admin/sprint 200 in 28ms (compile: 544µs, render: 27ms)
+ GET /admin/sprint 200 in 26ms (compile: 692µs, render: 26ms)
+ GET /admin/sprint 200 in 24ms (compile: 688µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 665µs, render: 24ms)
+ GET /admin/sprint 200 in 22ms (compile: 509µs, render: 21ms)
+ GET /admin/sprint 200 in 27ms (compile: 428µs, render: 27ms)
+ GET /admin/sprint 200 in 23ms (compile: 732µs, render: 22ms)
+ GET /admin/sprint 200 in 26ms (compile: 503µs, render: 26ms)
+ GET /admin/sprint 200 in 25ms (compile: 695µs, render: 25ms)
+ GET /admin/sprint 200 in 21ms (compile: 650µs, render: 21ms)
+ GET /admin/sprint 200 in 26ms (compile: 441µs, render: 26ms)
+ GET /admin/sprint 200 in 26ms (compile: 465µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 523µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 681µs, render: 26ms)
+ GET /admin/sprint 200 in 24ms (compile: 659µs, render: 23ms)
+ GET /admin/sprint 200 in 28ms (compile: 497µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 700µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 646µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 517µs, render: 27ms)
+ GET /admin/sprint 200 in 25ms (compile: 677µs, render: 24ms)
+ GET /admin/sprint 200 in 30ms (compile: 614µs, render: 29ms)
+ GET /admin/sprint 200 in 24ms (compile: 696µs, render: 24ms)
+ GET /admin/sprint 200 in 29ms (compile: 701µs, render: 28ms)
+ GET /admin/sprint 200 in 23ms (compile: 763µs, render: 22ms)
+ GET /admin/sprint 200 in 23ms (compile: 952µs, render: 23ms)
+ GET /admin/sprint 200 in 30ms (compile: 577µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 660µs, render: 30ms)
+ GET /admin/sprint 200 in 32ms (compile: 595µs, render: 32ms)
+ GET /admin/sprint 200 in 26ms (compile: 870µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 706µs, render: 26ms)
+ GET /admin/sprint 200 in 30ms (compile: 749µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 988µs, render: 29ms)
+ GET /admin/sprint 200 in 24ms (compile: 742µs, render: 23ms)
+ GET /admin/sprint 200 in 23ms (compile: 806µs, render: 22ms)
+ GET /admin/sprint 200 in 26ms (compile: 768µs, render: 25ms)
+ GET /admin/sprint 200 in 20ms (compile: 868µs, render: 20ms)
+ GET /admin/sprint 200 in 24ms (compile: 1177µs, render: 23ms)
+ GET /admin/sprint 200 in 30ms (compile: 802µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 1403µs, render: 28ms)
+ GET /admin/sprint 200 in 27ms (compile: 1164µs, render: 26ms)
+ GET /admin/sprint 200 in 32ms (compile: 747µs, render: 31ms)
+ GET /admin/sprint 200 in 32ms (compile: 726µs, render: 31ms)
+ GET /admin/sprint 200 in 26ms (compile: 919µs, render: 25ms)
+ GET /admin/sprint 200 in 25ms (compile: 778µs, render: 24ms)
+ GET /admin/sprint 200 in 20ms (compile: 882µs, render: 19ms)
+ GET /admin/sprint 200 in 28ms (compile: 1102µs, render: 26ms)
+ GET /admin/sprint 200 in 22ms (compile: 960µs, render: 21ms)
+ GET /admin/sprint 200 in 25ms (compile: 1144µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 581µs, render: 24ms)
+ GET /admin/sprint 200 in 21ms (compile: 640µs, render: 21ms)
+ GET /admin/sprint 200 in 26ms (compile: 488µs, render: 26ms)
+ GET /admin/sprint 200 in 22ms (compile: 528µs, render: 21ms)
+ GET /admin/sprint 200 in 27ms (compile: 608µs, render: 26ms)
+ GET /admin/sprint 200 in 25ms (compile: 859µs, render: 25ms)
+ GET /admin/sprint 200 in 21ms (compile: 1041µs, render: 20ms)
+ GET /admin/sprint 200 in 25ms (compile: 517µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 490µs, render: 26ms)
+ GET /admin/sprint 200 in 22ms (compile: 437µs, render: 21ms)
+ GET /admin/sprint 200 in 27ms (compile: 853µs, render: 27ms)
+ GET /admin/sprint 200 in 22ms (compile: 764µs, render: 22ms)
+ GET /admin/sprint 200 in 24ms (compile: 747µs, render: 24ms)
+ GET /admin/sprint 200 in 23ms (compile: 684µs, render: 23ms)
+ GET /admin/sprint 200 in 24ms (compile: 470µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 519µs, render: 24ms)
+ GET /admin/sprint 200 in 22ms (compile: 683µs, render: 22ms)
+ GET /admin/sprint 200 in 18ms (compile: 565µs, render: 17ms)
+ GET /admin/sprint 200 in 20ms (compile: 516µs, render: 19ms)
+ GET /admin/sprint 200 in 25ms (compile: 546µs, render: 24ms)
+ GET /admin/sprint 200 in 20ms (compile: 649µs, render: 19ms)
+ GET /admin/sprint 200 in 22ms (compile: 1116µs, render: 20ms)
+ GET /admin/sprint 200 in 24ms (compile: 535µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 746µs, render: 23ms)
+ GET /admin/sprint 200 in 25ms (compile: 463µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 517µs, render: 24ms)
+ GET /admin/sprint 200 in 21ms (compile: 603µs, render: 21ms)
+ GET /admin/sprint 200 in 25ms (compile: 485µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 560µs, render: 24ms)
+ GET /admin/sprint 200 in 25ms (compile: 438µs, render: 24ms)
+ GET /admin/sprint 200 in 24ms (compile: 472µs, render: 24ms)
+ GET /admin/sprint 200 in 20ms (compile: 558µs, render: 20ms)
+ GET /admin/sprint 200 in 16ms (compile: 449µs, render: 16ms)
+ GET /admin/sprint 200 in 25ms (compile: 532µs, render: 24ms)
+ GET /admin/sprint 200 in 21ms (compile: 545µs, render: 20ms)
+ GET /admin/sprint 200 in 28ms (compile: 637µs, render: 27ms)
+ GET /admin/sprint 200 in 23ms (compile: 619µs, render: 22ms)
+ GET /admin/sprint 200 in 26ms (compile: 826µs, render: 26ms)
+ GET /admin/sprint 200 in 27ms (compile: 719µs, render: 26ms)
+ GET /admin/sprint 200 in 26ms (compile: 513µs, render: 26ms)
+ GET /admin/sprint 200 in 28ms (compile: 478µs, render: 28ms)
+ GET /admin/sprint 200 in 25ms (compile: 772µs, render: 24ms)
+ GET /admin/sprint 200 in 27ms (compile: 597µs, render: 27ms)
+ GET /admin/sprint 200 in 26ms (compile: 811µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 699µs, render: 25ms)
+ GET /admin/sprint 200 in 26ms (compile: 525µs, render: 26ms)
+ GET /admin/sprint 200 in 24ms (compile: 575µs, render: 23ms)
+ GET /admin/sprint 200 in 39ms (compile: 449µs, render: 38ms)
+ GET /admin/sprint 200 in 39ms (compile: 858µs, render: 38ms)
+ GET /admin/sprint 200 in 33ms (compile: 644µs, render: 33ms)
+ GET /admin/sprint 200 in 29ms (compile: 917µs, render: 28ms)
+ GET /admin/sprint 200 in 24ms (compile: 767µs, render: 23ms)
+ GET /admin/sprint 200 in 27ms (compile: 717µs, render: 27ms)
+ GET /admin/sprint 200 in 27ms (compile: 724µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 715µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 725µs, render: 27ms)
+ GET /admin/sprint 200 in 25ms (compile: 873µs, render: 24ms)
+ GET /admin/sprint 200 in 28ms (compile: 647µs, render: 27ms)
+ GET /admin/sprint 200 in 28ms (compile: 731µs, render: 28ms)
+ GET /admin/sprint 200 in 28ms (compile: 633µs, render: 28ms)
+ GET /admin/sprint 200 in 28ms (compile: 678µs, render: 28ms)
+ GET /admin/sprint 200 in 26ms (compile: 780µs, render: 25ms)
+ GET /admin/sprint 200 in 29ms (compile: 701µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 654µs, render: 28ms)
+ GET /admin/sprint 200 in 29ms (compile: 661µs, render: 29ms)
+ GET /admin/sprint 200 in 31ms (compile: 790µs, render: 30ms)
+ GET /admin/sprint 200 in 27ms (compile: 694µs, render: 26ms)
+ GET /admin/sprint 200 in 31ms (compile: 699µs, render: 30ms)
+ GET /admin/sprint 200 in 24ms (compile: 1517µs, render: 23ms)
+ GET /admin/sprint 200 in 30ms (compile: 680µs, render: 29ms)
+ GET /admin/sprint 200 in 30ms (compile: 869µs, render: 29ms)
+ GET /admin/sprint 200 in 25ms (compile: 988µs, render: 24ms)
+ GET /admin/sprint 200 in 27ms (compile: 698µs, render: 26ms)
+ GET /admin/sprint 200 in 25ms (compile: 717µs, render: 25ms)
+ GET /admin/sprint 200 in 24ms (compile: 499µs, render: 23ms)
+ GET /admin/sprint 200 in 24ms (compile: 471µs, render: 23ms)
+ GET /admin/sprint 200 in 16ms (compile: 628µs, render: 15ms)
+ GET /admin/sprint 200 in 17ms (compile: 485µs, render: 16ms)
+ GET /admin/sprint 200 in 21ms (compile: 468µs, render: 20ms)
+ GET /admin/sprint 200 in 21ms (compile: 693µs, render: 20ms)
+ GET /admin/sprint 200 in 15ms (compile: 1095µs, render: 14ms)
+ GET /admin/sprint 200 in 6ms (compile: 877µs, render: 6ms)
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred:
+Next.js package not found
+
+Debug info:
+- Execution of subscribe_issues_and_diags_operation failed
+- Execution of endpoint_server_changed_operation failed
+- Execution of pick_endpoint failed
+- Execution of entrypoints_without_collectibles_operation failed
+- Execution of Project::entrypoints failed
+- Execution of AppProject::routes failed
+- Execution of directory_tree_to_entrypoints_internal failed
+- Execution of directory_tree_to_loader_tree failed
+- Next.js package not found
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred:
+Next.js package not found
+
+Debug info:
+- Execution of subscribe_issues_and_diags_operation failed
+- Execution of endpoint_server_changed_operation failed
+- Execution of pick_endpoint failed
+- Execution of entrypoints_without_collectibles_operation failed
+- Execution of Project::entrypoints failed
+- Execution of AppProject::routes failed
+- Execution of directory_tree_to_entrypoints_internal failed
+- Execution of directory_tree_to_loader_tree failed
+- Next.js package not found
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred:
+Next.js package not found
+
+Debug info:
+- Execution of subscribe_issues_and_diags_operation failed
+- Execution of endpoint_server_changed_operation failed
+- Execution of pick_endpoint failed
+- Execution of entrypoints_without_collectibles_operation failed
+- Execution of Project::entrypoints failed
+- Execution of AppProject::routes failed
+- Execution of directory_tree_to_entrypoints_internal failed
+- Execution of directory_tree_to_loader_tree failed
+- Next.js package not found
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred:
+Next.js package not found
+
+Debug info:
+- Execution of subscribe_issues_and_diags_operation failed
+- Execution of endpoint_server_changed_operation failed
+- Execution of pick_endpoint failed
+- Execution of entrypoints_without_collectibles_operation failed
+- Execution of Project::entrypoints failed
+- Execution of AppProject::routes failed
+- Execution of directory_tree_to_entrypoints_internal failed
+- Execution of directory_tree_to_loader_tree failed
+- Next.js package not found
+Error: Turbopack build failed with 1 errors:
+./app
+Error: Next.js inferred your workspace root, but it may not be correct.
+    We couldn't find the Next.js package (next/package.json) from the project directory: /Users/mac/Documents/autoflow/frontend/app
+     To fix this, set turbopack.root in your Next.js config, or ensure the Next.js package is resolvable from this directory.
+    Note: For security and performance reasons, files outside of the project directory will not be compiled.
+    See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+
+    at ignore-listed frames
+[?25h
+ ELIFECYCLE  Command failed with exit code 1.

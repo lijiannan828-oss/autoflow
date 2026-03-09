@@ -11,8 +11,15 @@ import {
   getAgentProgress,
   getOverallProgress,
   getCurrentPhase,
+  v22Agents,
+  v22Phases,
+  v22IntegrationTasks,
+  v22Checkpoints,
+  v22AcceptanceRecords,
+  getV22OverallProgress,
+  getCurrentSprint,
 } from "@/lib/sprint-data"
-import type { AgentInfo, SprintTask, TaskStatus } from "@/lib/sprint-data"
+import type { AgentInfo, SprintTask, TaskStatus, PhaseInfo, Checkpoint } from "@/lib/sprint-data"
 
 // ─── Color maps ──────────────────────────────────────
 const agentColors: Record<string, { bg: string; border: string; text: string; dot: string; line: string }> = {
@@ -275,8 +282,9 @@ function CheckpointCards() {
 
 // ─── Acceptance Tab ──────────────────────────────────
 
-function AcceptanceTab() {
-  if (acceptanceRecords.length === 0) {
+function AcceptanceTab({ records }: { records?: typeof acceptanceRecords }) {
+  const data = records ?? acceptanceRecords
+  if (data.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground text-sm">
         暂无验收记录
@@ -286,7 +294,7 @@ function AcceptanceTab() {
 
   return (
     <div className="space-y-4">
-      {acceptanceRecords.map(record => (
+      {data.map(record => (
         <div key={record.id} className="rounded-lg border border-border/50 bg-card/50 overflow-hidden">
           {/* Record header */}
           <div className="bg-emerald-500/10 px-4 py-3 flex items-center justify-between">
@@ -324,13 +332,206 @@ function AcceptanceTab() {
   )
 }
 
+// ─── Generic components for v2.2 reuse ──────────────
+
+function GenericProgressBar({ progressFn }: { progressFn: () => { done: number; total: number; percent: number; doneMin: number; totalMin: number; percentByTime: number } }) {
+  const p = progressFn()
+  return (
+    <div className="rounded-lg border border-border/50 bg-card/50 p-4 space-y-3">
+      <span className="text-sm font-medium">总体进度</span>
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] text-muted-foreground">按任务数</span>
+          <span className="text-[11px] text-muted-foreground">{p.done}/{p.total} ({p.percent}%)</span>
+        </div>
+        <div className="h-2.5 rounded-full bg-secondary overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500" style={{ width: `${p.percent}%` }} />
+        </div>
+      </div>
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] text-muted-foreground">按预估工时</span>
+          <span className="text-[11px] text-muted-foreground">{formatMin(p.doneMin)}/{formatMin(p.totalMin)} ({p.percentByTime}%)</span>
+        </div>
+        <div className="h-2.5 rounded-full bg-secondary overflow-hidden">
+          <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500" style={{ width: `${p.percentByTime}%` }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GenericPhaseTimeline({ phaseList, currentPhaseId }: { phaseList: PhaseInfo[]; currentPhaseId: number }) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-card/50 p-4">
+      <h3 className="text-sm font-medium mb-3">阶段时间表</h3>
+      <div className="flex items-center gap-0">
+        {phaseList.map((phase, i) => {
+          const isActive = phase.id === currentPhaseId
+          const isDone = phase.id < currentPhaseId
+          return (
+            <div key={phase.id} className="flex items-center flex-1">
+              <div className="flex flex-col items-center flex-1">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
+                  isDone ? "bg-emerald-500 border-emerald-500 text-white" : isActive ? "bg-yellow-500/20 border-yellow-500 text-yellow-400" : "bg-secondary border-border text-muted-foreground"
+                }`}>
+                  {isDone ? "✓" : phase.id}
+                </div>
+                <div className={`mt-1.5 text-[10px] font-medium text-center ${isActive ? "text-yellow-400" : isDone ? "text-emerald-400" : "text-muted-foreground"}`}>
+                  {phase.name}
+                </div>
+                <div className="text-[9px] text-muted-foreground text-center">{phase.timeframe}</div>
+                <div className="text-[9px] text-muted-foreground/70 text-center">{phase.description}</div>
+              </div>
+              {i < phaseList.length - 1 && (
+                <div className={`h-0.5 w-full min-w-4 -mt-6 ${isDone ? "bg-emerald-500" : "bg-border"}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function GenericIntegrationTasksCard({ tasks, title }: { tasks: SprintTask[]; title?: string }) {
+  const done = tasks.filter(t => t.status === "done").length
+  return (
+    <div className="rounded-lg border border-orange-500/30 bg-card/50 overflow-hidden">
+      <div className="bg-orange-500/10 px-4 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-orange-500" />
+          <span className="text-sm font-bold text-orange-400">{title ?? "集成任务"}</span>
+        </div>
+        <span className="text-xs text-muted-foreground">{done}/{tasks.length}</span>
+      </div>
+      <div className="divide-y divide-border/30">
+        {tasks.map(task => (
+          <TaskRow key={task.id} task={task} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function GenericCheckpointCards({ items }: { items: Checkpoint[] }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {items.map(cp => {
+        const passed = cp.items.filter(i => i.passed).length
+        const total = cp.items.length
+        return (
+          <div key={cp.id} className="rounded-lg border border-border/50 bg-card/50 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-border/30 flex items-center justify-between">
+              <span className="text-sm font-medium">{cp.day}</span>
+              <span className="text-xs text-muted-foreground">{passed}/{total} 通过</span>
+            </div>
+            <div className="p-3 space-y-2">
+              {cp.items.map((item, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className={`text-xs mt-0.5 ${item.passed ? "text-emerald-400" : "text-muted-foreground"}`}>
+                    {item.passed ? "●" : "○"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs">{item.label}</div>
+                    <div className="text-[10px] text-muted-foreground truncate">{item.criteria}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── v2.2 Dependency Graph ──────────────────────────
+
+function V22DependencyGraph() {
+  return (
+    <div className="rounded-lg border border-border/50 bg-card/50 p-4">
+      <h3 className="text-sm font-medium mb-4">Agent 依赖关系</h3>
+      <div className="flex flex-col items-center gap-2">
+        {/* Row 1: 主控 */}
+        <AgentNode agent={v22Agents.find(a => a.id === "主控")!} />
+        <div className="text-muted-foreground text-xs">▼</div>
+        {/* Row 2: 编排 / 人审 / 回炉 / 运维 / 测试 (parallel, depend on 主控) */}
+        <div className="flex items-start gap-3 flex-wrap justify-center">
+          <AgentNode agent={v22Agents.find(a => a.id === "编排")!} />
+          <AgentNode agent={v22Agents.find(a => a.id === "人审")!} />
+          <AgentNode agent={v22Agents.find(a => a.id === "回炉")!} />
+          <AgentNode agent={v22Agents.find(a => a.id === "运维")!} />
+          <AgentNode agent={v22Agents.find(a => a.id === "测试")!} />
+        </div>
+        <div className="text-muted-foreground text-xs">▼</div>
+        {/* Row 3: Integration */}
+        <div className="rounded-md border border-border/50 bg-secondary/30 px-4 py-2 text-xs font-medium text-muted-foreground">
+          v2.2 Day 3: E2E 集成验收
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── v2.2 Progress Content ──────────────────────────
+
+function V22ProgressContent() {
+  return (
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <GenericProgressBar progressFn={getV22OverallProgress} />
+        <GenericPhaseTimeline phaseList={v22Phases} currentPhaseId={0} />
+      </div>
+
+      <V22DependencyGraph />
+
+      <div className="space-y-4">
+        <h2 className="text-sm font-medium">各 Agent 任务明细</h2>
+        {/* 主控 first */}
+        <AgentTaskCard agent={v22Agents.find(a => a.id === "主控")!} />
+        {/* Three parallel agents */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <AgentTaskCard agent={v22Agents.find(a => a.id === "编排")!} />
+          <AgentTaskCard agent={v22Agents.find(a => a.id === "人审")!} />
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <AgentTaskCard agent={v22Agents.find(a => a.id === "回炉")!} />
+          <AgentTaskCard agent={v22Agents.find(a => a.id === "运维")!} />
+          <AgentTaskCard agent={v22Agents.find(a => a.id === "测试")!} />
+        </div>
+        {/* Integration */}
+        <GenericIntegrationTasksCard tasks={v22IntegrationTasks} title="v2.2 集成任务" />
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-sm font-medium">每日检查点</h2>
+        <GenericCheckpointCards items={v22Checkpoints} />
+      </div>
+    </>
+  )
+}
+
 // ─── Main page ───────────────────────────────────────
 
+type SprintId = "mvp0" | "v22"
 type TabId = "progress" | "acceptance"
 
 export default function SprintDashboardPage() {
-  const overall = useMemo(() => getOverallProgress(), [])
+  const defaultSprint = useMemo(() => getCurrentSprint(), [])
+  const [activeSprint, setActiveSprint] = useState<SprintId>(defaultSprint)
   const [activeTab, setActiveTab] = useState<TabId>("progress")
+
+  const overall = useMemo(
+    () => activeSprint === "mvp0" ? getOverallProgress() : getV22OverallProgress(),
+    [activeSprint]
+  )
+
+  const sprintMeta: Record<SprintId, { label: string; date: string }> = {
+    mvp0: { label: "MVP-0", date: "03-08 ~ 03-10" },
+    v22:  { label: "v2.2", date: "03-10 ~ 03-12" },
+  }
+  const meta = sprintMeta[activeSprint]
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
@@ -341,15 +542,33 @@ export default function SprintDashboardPage() {
         <header className="shrink-0 border-b border-border/50 bg-background/95 backdrop-blur">
           <div className="flex h-12 items-center justify-between px-6">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-foreground">MVP-0 三日冲刺</span>
+              {/* Sprint switcher */}
+              <div className="flex items-center gap-0.5 bg-secondary/50 rounded-md p-0.5">
+                {(Object.entries(sprintMeta) as [SprintId, { label: string; date: string }][]).map(([id, m]) => (
+                  <button
+                    key={id}
+                    onClick={() => { setActiveSprint(id); setActiveTab("progress") }}
+                    className={`px-3 py-1 text-[11px] font-medium rounded transition-colors ${
+                      activeSprint === id
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-sm font-medium text-foreground">{meta.label} 冲刺</span>
               <span className="text-[10px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full font-medium">
-                2026-03-08 ~ 03-10
+                {meta.date}
               </span>
-              {/* Tab switcher */}
+              {/* Sub-tab switcher */}
               <div className="flex items-center gap-0.5 bg-secondary/50 rounded-md p-0.5 ml-2">
                 {([
                   { id: "progress" as TabId, label: "进度" },
-                  { id: "acceptance" as TabId, label: `验收 (${acceptanceRecords.length})` },
+                  ...(activeSprint === "mvp0"
+                    ? [{ id: "acceptance" as TabId, label: `验收 (${acceptanceRecords.length})` }]
+                    : [{ id: "acceptance" as TabId, label: `验收 (${v22AcceptanceRecords.length})` }]),
                 ] as const).map(tab => (
                   <button
                     key={tab.id}
@@ -374,47 +593,55 @@ export default function SprintDashboardPage() {
 
         {/* Content */}
         <main className="flex-1 p-6 space-y-6 overflow-y-auto">
-          {activeTab === "progress" ? (
-            <>
-              {/* Row 1: Overall progress + Phase timeline */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <OverallProgressBar />
-                <PhaseTimeline />
-              </div>
-
-              {/* Row 2: Dependency graph */}
-              <DependencyGraph />
-
-              {/* Row 3: Agent task cards */}
-              <div className="space-y-4">
-                <h2 className="text-sm font-medium">各 Agent 任务明细</h2>
-                {/* Phase 0 */}
-                <AgentTaskCard agent={agents.find(a => a.id === "α")!} />
-                {/* Phase 1 - parallel */}
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                  <AgentTaskCard agent={agents.find(a => a.id === "β")!} />
-                  <AgentTaskCard agent={agents.find(a => a.id === "γ")!} />
-                  <AgentTaskCard agent={agents.find(a => a.id === "ε")!} />
-                  <AgentTaskCard agent={agents.find(a => a.id === "ζ")!} />
+          {activeSprint === "mvp0" ? (
+            activeTab === "progress" ? (
+              <>
+                {/* Row 1: Overall progress + Phase timeline */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <OverallProgressBar />
+                  <PhaseTimeline />
                 </div>
-                {/* Phase 2 */}
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                  <AgentTaskCard agent={agents.find(a => a.id === "δ")!} />
-                  <AgentTaskCard agent={agents.find(a => a.id === "η")!} />
-                  <AgentTaskCard agent={agents.find(a => a.id === "θ")!} />
-                </div>
-                {/* Phase 3 - Integration */}
-                <IntegrationTasksCard />
-              </div>
 
-              {/* Row 4: Checkpoints */}
-              <div className="space-y-3">
-                <h2 className="text-sm font-medium">每日检查点</h2>
-                <CheckpointCards />
-              </div>
-            </>
+                {/* Row 2: Dependency graph */}
+                <DependencyGraph />
+
+                {/* Row 3: Agent task cards */}
+                <div className="space-y-4">
+                  <h2 className="text-sm font-medium">各 Agent 任务明细</h2>
+                  {/* Phase 0 */}
+                  <AgentTaskCard agent={agents.find(a => a.id === "α")!} />
+                  {/* Phase 1 - parallel */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <AgentTaskCard agent={agents.find(a => a.id === "β")!} />
+                    <AgentTaskCard agent={agents.find(a => a.id === "γ")!} />
+                    <AgentTaskCard agent={agents.find(a => a.id === "ε")!} />
+                    <AgentTaskCard agent={agents.find(a => a.id === "ζ")!} />
+                  </div>
+                  {/* Phase 2 */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    <AgentTaskCard agent={agents.find(a => a.id === "δ")!} />
+                    <AgentTaskCard agent={agents.find(a => a.id === "η")!} />
+                    <AgentTaskCard agent={agents.find(a => a.id === "θ")!} />
+                  </div>
+                  {/* Phase 3 - Integration */}
+                  <IntegrationTasksCard />
+                </div>
+
+                {/* Row 4: Checkpoints */}
+                <div className="space-y-3">
+                  <h2 className="text-sm font-medium">每日检查点</h2>
+                  <CheckpointCards />
+                </div>
+              </>
+            ) : (
+              <AcceptanceTab />
+            )
           ) : (
-            <AcceptanceTab />
+            activeTab === "progress" ? (
+              <V22ProgressContent />
+            ) : (
+              <AcceptanceTab records={v22AcceptanceRecords} />
+            )
           )}
         </main>
       </div>

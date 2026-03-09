@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bastion-gateway
+  namespace: default
+  labels:
+    app: bastion-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bastion-gateway
+  template:
+    metadata:
+      labels:
+        app: bastion-gateway
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "10.0.0.116"
+      containers:
+        - name: gateway
+          image: autoflow-cn-shanghai.cr.volces.com/autoflow/gateway:v1
+          command:
+            - bash
+            - -c
+            - |
+              # Fix SSH key permissions
+              cp /ssh-key/autoflow.pem /tmp/autoflow.pem
+              chmod 600 /tmp/autoflow.pem
+
+              # Start SSH tunnels to bastion
+              # PG RDS: local 5432 → bastion → 118.196.75.55:5432
+              ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+                -i /tmp/autoflow.pem -N -L 0.0.0.0:5432:118.196.75.55:5432 root@10.0.0.109 &
+
+              # TOS: local 8443 → bastion → tos-cn-shanghai.volces.com:443
+              ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+                -i /tmp/autoflow.pem -N -L 0.0.0.0:8443:tos-cn-shanghai.volces.com:443 root@10.0.0.109 &
+
+              # LLM API: local 8444 → bastion → www.dmxapi.cn:443
+              ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+                -i /tmp/autoflow.pem -N -L 0.0.0.0:8444:www.dmxapi.cn:443 root@10.0.0.109 &
+
+              echo "All SSH tunnels started, waiting..."
+              # Wait for tunnels to establish
+              sleep 5
+              # Keep container alive and restart dead tunnels
+              while true; do
+                sleep 60
+                for port in 5432 8443 8444; do
+                  # Count listeners on this port - only restart if zero
+                  count=$(ss -tlnp 2>/dev/null | grep -c ":$port " || true)
+                  if [ "$count" -eq 0 ]; then
+                    echo "$(date) Tunnel on port $port died, restarting..."
+                    case $port in
+                      5432) ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -i /tmp/autoflow.pem -N -L 0.0.0.0:5432:118.196.75.55:5432 root@10.0.0.109 & ;;
+                      8443) ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -i /tmp/autoflow.pem -N -L 0.0.0.0:8443:tos-cn-shanghai.volces.com:443 root@10.0.0.109 & ;;
+                      8444) ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -i /tmp/autoflow.pem -N -L 0.0.0.0:8444:www.dmxapi.cn:443 root@10.0.0.109 & ;;
+                    esac
+                  fi
+                done
+              done
+          ports:
+            - containerPort: 5432
+              name: pg
+            - containerPort: 8443
+              name: tos
+            - containerPort: 8444
+              name: llm
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          volumeMounts:
+            - name: ssh-key
+              mountPath: /ssh-key
+              readOnly: true
+      volumes:
+        - name: ssh-key
+          secret:
+            secretName: bastion-ssh-key
+            defaultMode: 0400
+      imagePullSecrets:
+        - name: volc-cr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bastion-gateway
+  namespace: default
+  labels:
+    app: bastion-gateway
+spec:
+  type: ClusterIP
+  selector:
+    app: bastion-gateway
+  ports:
+    - name: pg
+      port: 5432
+      targetPort: 5432
+    - name: tos
+      port: 8443
+      targetPort: 8443
+    - name: llm
+      port: 8444
+      targetPort: 8444

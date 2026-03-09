@@ -142,6 +142,20 @@ class PipelineState(TypedDict, total=False):
     should_terminate: bool
     termination_reason: str | None
 
+    # ── v2.2 Agent runtime ─────────────────────────────────────────────
+    # Agent 决策 trace（当前 run 内）
+    agent_traces: list[dict[str, Any]]
+
+    # Supervisor 成本预算追踪
+    cost_budget: dict[str, Any]  # {budget_per_min, spent, remaining, health, alerts[]}
+
+    # 项目集约束缓存（Supervisor 在首次检查时加载）
+    project_group_constraints: dict[str, Any]  # {compliance_rules, style_preferences, ...}
+
+    # ── Parallel node tracking ────────────────────────────────────────
+    # Tracks which parallel nodes have completed in a group
+    parallel_completed: dict[str, list[str]]  # group_key → [completed_node_ids]
+
     # ── Observability ───────────────────────────────────────────────────
     warnings: list[str]
     errors: list[str]
@@ -182,6 +196,10 @@ def make_initial_state(
         rerun_from_ticket_id=rerun_from_ticket_id,
         should_terminate=False,
         termination_reason=None,
+        agent_traces=[],
+        cost_budget={},
+        project_group_constraints={},
+        parallel_completed={},
         warnings=[],
         errors=[],
     )

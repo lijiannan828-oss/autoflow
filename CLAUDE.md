@@ -13,10 +13,20 @@
 ```
 backend/
   common/        # 共享 DB 工具、env、合同、模型定义、状态枚举
+                 #   agent_memory.py — Agent 记忆层 CRUD
+                 #   rag.py — RAG 检索客户端（Mock/Qdrant）
+                 #   mq.py — 消息队列客户端（Mock/RocketMQ）
+                 #   llm_client.py — LLM 调用 + 成本追踪
+  agents/        # v2.2 Agent 框架
+    base.py      #   BaseAgent 基类（三层决策: plan_episode→execute_shot→review_batch）
+    registry.py  #   10 Agent 注册表 + 自动发现
+    supervisor.py      # SupervisorAgent（成本+合规横切守卫）
+    evolution_engine.py # EvolutionEngineAgent（4模式自进化）
+    production/  #   7 生产 Agent 实现
   orchestrator/  # LangGraph 流水线：graph/、service.py、models.py、statuses.py
   rerun/         # 回炉票据 / 重跑规划器（T10–T12，预留）
 frontend/        # Next.js 16 审核与管理后台（从 frontend/ 目录启动）
-migrations/      # 顺序执行的 SQL 迁移文件（001_*.sql …）
+migrations/      # 顺序执行的 SQL 迁移文件（001_*.sql … 009_*.sql）
 schema/          # 枚举与约束 SQL 文件
 docs/            # 架构决策、合同文档、任务启动文档
 scripts/         # 基础设施 / 联通性脚本（运维平台 Agent 负责）
@@ -87,20 +97,45 @@ Next.js 16 应用，使用 React 19 + Tailwind CSS v4 + shadcn/ui（Radix UI 组
 
 ### 数据库与迁移
 
-按顺序执行迁移：`migrations/001_*.sql` → … → `migrations/008_*.sql`。枚举：`schema/enums.sql`。约束：`schema/t1_constraints.sql`。
+按顺序执行迁移：`migrations/001_*.sql` → … → `migrations/009_*.sql`。枚举：`schema/enums.sql`。约束：`schema/t1_constraints.sql`。
 
 迁移规则（合同约定）：**只增不删** —— 加表、加字段、加索引。未经明确授权，禁止删表、删字段、修改已有列类型。
+
+### v2.2 Agent 架构（`backend/agents/`）
+
+10 Agent 自进化管线：7 生产 Agent + SupervisorAgent + EvolutionEngineAgent + Orchestrator（框架层）。
+
+**三层记忆**：Working Memory（PipelineState）→ Project Memory（PG `agent_memory`）→ Long-term Memory（Qdrant RAG）。
+
+**三层决策模型**：集级策划 `plan_episode()`（1次LLM）→ 镜头执行 `execute_shot()`（零LLM）→ 批后复盘 `review_batch()`（1次LLM）。非生产 Agent 保持旧接口 `reason()`+`act()`。每步自动记录 `agent_traces`。
+
+**Prompt 资产**：Master Template（`prompt_assets`）→ Genre Adapter（`genre_adapters`）→ Instance Adapter（运行时注入）。
+
+**基础设施客户端**：
+- `rag.py`: `get_rag_client()` — 有 `QDRANT_URL` 用 QdrantRagClient，否则 MockRagClient
+- `mq.py`: `get_mq_client()` — 有 `ROCKETMQ_ENDPOINT` 用 RocketMQClient，否则 MockMQClient
+
+**新环境变量**（可选）：`QDRANT_URL`、`QDRANT_API_KEY`、`ROCKETMQ_ENDPOINT`、`ROCKETMQ_ACCESS_KEY`、`ROCKETMQ_SECRET_KEY`
 
 ### 多 Agent 文件所有权
 
 本仓库由多个 Agent 协作开发，文件所有权严格划分：
-- `backend/common/contracts/`、`migrations/`、`schema/`、`docs/multi-agent-*.md`、`.cursor/rules/*.mdc` — **主控 Agent** 专属
+- `backend/common/contracts/`、`migrations/`、`schema/`、`docs/multi-agent-*.md`、`.cursor/rules/*.mdc`、`backend/agents/base.py`、`backend/agents/registry.py` — **主控 Agent** 专属
 - `frontend/**` — **人审入口 Agent**（除非主控 Agent 临时授权）
 - `scripts/**` — **运维平台 Agent**
 - `backend/orchestrator/` — **编排运行时 Agent**
 - `backend/rerun/` — **回炉与版本 Agent**
 
 修改共享合同（状态枚举、`review_tasks`/`return_tickets`/`runs`/`node_runs`/`artifacts` 关键字段、Gate DTO、异步回调 payload）前，必须先查阅 `docs/shared-contract-freeze-batch-1.md`。冻结合同不得由执行 Agent 自行修改，需向主控 Agent 汇报冲突。
+
+### 冲刺进度同步（强制规则）
+
+**所有 Agent 在完成任务后，必须同步更新 `frontend/lib/sprint-data.ts`**：
+1. 将对应 task 的 `status` 改为 `"done"`，填入 `completedAt`（ISO 时间戳）
+2. 如果任务产生了新的阻塞信息或依赖变更，同步更新 `v22Checkpoints` 中对应检查点的 `passed` 状态
+3. 完成后运行 `cd frontend && pnpm build` 确认无编译错误
+
+这是**硬性要求**，不需要用户提醒。冲刺看板（`/admin/sprint`）是全员共享的进度真相源。
 
 ### 关键合同约定
 

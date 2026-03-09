@@ -1,0 +1,966 @@
+# AutoFlow v2.2 系统需求规格书
+
+## 「自进化AIGC短剧生产管线」
+
+> **版本**：v2.2（基于v2.1 + 项目集管理/部署架构/数据策略修订）
+> **前序文档**：`schema-contracts.md`（数据模型）、`node-spec-sheet.md`（节点详细规格）、`AutoFlow_Cost_Calculation.md`（成本精算）
+> **核心理念**：AutoFlow是由多个AI智能体组成的「内容工厂生命体」——它感知、学习、反思、进化，人类只在关键决策点参与，其余由智能体自主完成。
+
+---
+
+# 第一章 系统愿景与设计原则
+
+## 1.1 愿景
+
+将5-10万字的中文欧美剧剧本，通过多智能体协作，全自动输出30-90集短剧（每集60-90秒），单分钟成本≤30元，每周系统自动进化一次，人类月均干预时间不超过总工时的10%。
+
+## 1.2 六项设计原则
+
+**原则一：Agent-First，非Code-First**
+系统行为由Agent的Prompt和配置驱动，而非硬编码逻辑。新需求优先通过调整Agent指令实现，而非开发新代码。代码提供「能力」，Agent决定「如何用」。
+
+**原则二：进化即生产**
+每一次生产运行同时是训练数据的收集过程。人类审核的每一个"通过"和"打回"都是进化信号。系统不区分"生产模式"和"学习模式"——它们是同一个过程。
+
+**原则三：人类审核员是「教练」而非「操作员」**
+审核员不操作任何技术参数（不写prompt、不调参数、不手动生成）。审核员只做两件事：看成品 → 用自然语言给出意见。所有技术执行由Agent完成。
+
+**原则四：失败是常态，回退是能力**
+每个关键状态变更前自动创建快照，任何错误可在秒级回退。Agent的每次"自主优化"必须经过小规模A/B测试验证，且旧版本永久可回溯。
+
+**原则五：质量为纲，成本为翼**
+质量硬红线不可妥协（具体指标在质量规格文档中单独约束）。在质量达标的前提下，持续寻找更优的成本策略。成本允许在一定范围内超出预算（单集≤150%红线），但必须触发预警，并自动启动小范围低成本替代方案的A/B测试——用数据验证降本是否会影响质量，而非盲目砍成本。
+
+**原则六：可观测性**
+每个Agent的每次决策过程（输入、推理链、输出、耗时、成本）都被完整记录。任何人可以在飞书中@任何Agent，询问"你为什么做了这个决定"，Agent能给出完整的推理回溯。
+
+---
+
+# 第二章 多智能体架构总览
+
+## 2.1 全局模型策略（v1关键决策）
+
+> **v1阶段策略**：时间紧任务重，没有精力对开源模型进行调优到理想状态。v1全面采用闭源模型为主力，确保输出质量最高。后续版本可逐步引入调优后的开源模型替换部分环节。
+
+| 用途 | 首选模型 | 备选模型 | 说明 |
+|------|---------|---------|------|
+| 剧本解析/分镜/定稿/分级 | **Gemini 3.1** | **Claude Opus 4.6** | 结构化JSON输出能力强 |
+| 分镜质检/视觉质检投票 | **GPT 5.4 + Gemini 3.1 + Claude Opus 4.6** | — | 三模型独立评审 |
+| Prompt工程/视觉策划 | **Gemini 3.1** | **Claude Opus 4.6** | prompt质量直接决定出图效果 |
+| 进化反思/审核调度 | **Claude Opus 4.6** | **Gemini 3.1** | 长文推理和意图理解 |
+| 多模态分析（连续性/节奏） | **Gemini 3.1** | **GPT 5.4** | 多图/视频理解能力最强 |
+
+**闭源API接入**：DMXAPI（主）+ OpenRouter（备），双平台冗余，自动failover。
+
+## 2.2 Agent团队编制（10个Agent + 1框架）
+
+> **精简原则**：消除悬空Agent（Episode Planner无节点）、合并串行进化链路（4→1消除3次交接）、统一横切守卫（Cost+PM→Supervisor）。Orchestrator降级为框架（它不思考、不决策、不调LLM）。
+
+### 2.2.1 生产线Agent（7个）
+
+| # | Agent名称 | 职责 | 核心模型 | 自主权限 | 负责节点 |
+|---|----------|------|---------|---------|---------|
+| 1 | **Script Analyst** | 理解剧本，提取角色/场景/结构，输出分集骨架 | Gemini 3.1 | 中 | N01 |
+| 2 | **Shot Designer** | 设计镜头序列，分配难度/质检层级，控节奏 | Gemini 3.1 | 高：分镜策略可自进化 | N02, N04, N05, N16, N16b |
+| 3 | **Visual Director** | 视觉策划+prompt工程+关键帧/视频生成全链路 | Gemini 3.1 | 高：prompt模板可自进化 | N06, N07, N09, N10, N13, N14, N17, N19 |
+| 4 | **Audio Director** | 美术阶段：核心角色音色；定稿后：TTS/唇同步/BGM/SFX | Gemini 3.1 | 中 | N07b, N20, N22 |
+| 5 | **Quality Inspector** | 多模型交叉评审，连续性分析 | GPT5.4+Gemini3.1+Opus4.6 | 中：可调评分权重 | N03, N11, N12, N15 |
+| 6 | **Compositor** | 时间轴编排，多轨混音，成片合成，分发 | 规则引擎（FFmpeg） | 低 | N23, N25, N26 |
+| 7 | **Review Dispatcher** | 解析人类审核批注，拆分为可执行任务并调度 | Claude Opus 4.6 | 高：理解自然语言意图 | N08, N18, N21, N24 |
+
+### 2.2.2 监督Agent（1个）——横切守卫
+
+| # | Agent名称 | 职责 | 核心模型 | 介入方式 |
+|---|----------|------|---------|---------|
+| 8 | **Supervisor** | 成本监控+项目需求校验+预算分配+降级触发+合规检查 | Gemini 3.1 + 规则引擎 | 横切：每个关键checkpoint自动触发 |
+
+> 由原Cost Controller + PM Agent合并。成本和合规本质上都是"约束守卫"——在关键checkpoint检查输出是否在预算内+是否符合项目集要求，逻辑高度相似，合并后共享checkpoint触发机制，减少重复检查。
+
+### 2.2.3 进化Agent（1个）——自我进化全链路
+
+| # | Agent名称 | 职责 | 核心模型 | 运行模式 |
+|---|----------|------|---------|---------|
+| 9 | **Evolution Engine** | 反思分析→prompt进化→A/B测试→RAG管理→LoRA训练 | Claude Opus 4.6 (Thinking) + Gemini 3.1 | 四模式（见下） |
+
+> 由原Reflection Agent + Prompt Evolver + RAG Curator + Style Trainer四合一。原4个Agent的工作是严格串行的（反思→进化→入库→训练），分成4个Agent需要3次序列化交接。合并后，一个Agent一气呵成，问题发现后直接在同一上下文中驱动优化。
+
+**Evolution Engine四种运行模式**：
+
+| 模式 | 频率 | 内容 |
+|------|------|------|
+| 每日反思 | K8s CronJob 00:00 | 扫描当日质检+审核日志→发现问题模式→推送飞书日报 |
+| 每周进化 | K8s CronJob 周一09:00 | 汇总本周问题→生成prompt变体→A/B测试→推送确认 |
+| 持续入库 | 事件驱动（质检完成后） | 高分案例入RAG→清洗过期数据→维护向量索引 |
+| 按条件训练 | 阈值触发 | RAG案例达标→筛选训练数据→启动LoRA→评估→推送确认 |
+
+### 2.2.4 框架（不计入Agent）
+
+| 组件 | 职责 |
+|------|------|
+| **LangGraph Orchestrator** | 状态机调度，纯代码逻辑，不调LLM，不做决策 |
+
+## 2.3 架构拓扑
+
+```
+                    ┌──────────────┐
+                    │  飞书终端      │
+                    │  OpenClaw审阅  │
+                    └──────┬───────┘
+                           │
+                    ┌──────▼───────┐
+                    │ Agent Gateway │  ← orchestrator Pod
+                    │ (FastAPI)     │    含LangGraph + Supervisor
+                    └──────┬───────┘
+                           │
+         ┌─────────────────▼──────────────────┐
+         │         RocketMQ 任务队列            │
+         └──┬────────┬─────────┬────────┬─────┘
+            │        │         │        │
+       ┌────▼──┐ ┌──▼────┐ ┌─▼───┐ ┌──▼─────┐
+       │闭源API│ │ComfyUI│ │RAG  │ │火山引擎  │
+       │Gemini │ │GPU集群 │ │Qdrant│ │TOS/RDS  │
+       │Claude │ │A800×8 │ │      │ │Redis/MQ │
+       │GPT5.4 │ │4090D×8│ │      │ │         │
+       └───────┘ └───────┘ └─────┘ └─────────┘
+```
+
+## 2.4 Agent即时决策机制——每次任务的智能统筹
+
+Agent的价值不仅是长期进化（周/月级），更是**每次接到任务时的即时智能决策**。这是Agent区别于"固定脚本"的核心。
+
+每个Agent接到任务时经历五步微型决策循环：
+
+```
+① 理解上下文 → 读取ShotSpec/场景/角色 + 项目集约束 + 叙事位置
+      ↓
+② 检索经验 → RAG召回同类成功案例 + 读取Agent记忆（同角色/同场景历史处理经验）
+      ↓
+③ 选择策略 → 选哪版prompt模板？哪个题材适配器？候选数量要不要调？模型要不要切？成本够不够？
+      ↓
+④ 执行+自检 → 执行生成/分析 → 对输出做self-check（格式？一致性？上下游衔接？）
+      ↓
+⑤ 记录+沉淀 → 完整决策trace → 高分结果沉淀为记忆
+```
+
+各Agent的典型即时决策场景：
+
+| Agent | 即时决策示例 |
+|-------|------------|
+| **Shot Designer** | "太后怒摔茶杯"用几个镜头？RAG中3个类似场景哪个评分最高？这集特写已太多，是否平衡景别？ |
+| **Visual Director** | 这个夜景prompt要不要加烛光约束？（检查RAG：加了的评分更高）。上一镜暖色调，这镜要不要保持？ |
+| **Audio Director** | 高潮段BGM，生成还是曲库选？（检查：曲库匹配评分9.1>生成8.7→选曲库）。角色说"急切地"→TTS语速调高 |
+| **Quality Inspector** | FaceID 0.82，该角色历史均值0.89，P25分位→打回 |
+| **Supervisor** | 前20镜已花¥12，剩10镜头预算¥0.8/镜→后续S1降为S0策略？本集73秒，项目集要求≤60秒→通知Shot Designer减镜头 |
+
+## 2.5 Agent记忆机制
+
+Agent的记忆分三层，解决不同时间尺度的经验积累需求：
+
+| 记忆层 | 存储位置 | 生命周期 | 用途 |
+|--------|---------|---------|------|
+| **工作记忆** | LangGraph State | 单次任务执行期间 | 当前镜头的上下文、中间计算结果 |
+| **项目记忆** | PostgreSQL `agent_memory`表 | 项目周期 | "太后角色ip_adapter最佳值0.78"、"本剧夜景需加暖光约束" |
+| **长期记忆** | RAG Qdrant + Prompt资产库 | 永久（跨项目） | 全链路成功案例、prompt版本历史、风格模式 |
+
+```typescript
+// agent_memory表（PostgreSQL）
+interface AgentMemory {
+  memory_id: string;
+  agent_name: string;                  // "visual_director"
+  memory_type: "task_summary" | "lesson_learned" | "preference" | "statistics";
+  scope: "global" | "project" | "episode";
+  scope_id?: string;
+  
+  content: {
+    key: string;                       // "character_太后_best_practice"
+    value: any;
+    confidence: number;                // 越常被验证越高
+  };
+  
+  created_at: string;
+  last_accessed_at: string;
+  access_count: number;
+}
+```
+
+Agent执行时自然利用记忆：
+
+```python
+class VisualDirectorAgent:
+    async def execute(self, task: NodeTask) -> NodeOutput:
+        # ① 加载项目记忆
+        memories = await self.read_memory(scope="project", key_prefix=f"character_{character_id}")
+        # ② 检索RAG长期记忆
+        similar_cases = await self.search_rag(tags=task.shot_spec.retrieval_tags, top_k=3)
+        # ③ 智能选择prompt策略
+        adapter = self._select_best_adapter(memories, similar_cases)
+        prompt = self._assemble_instance_prompt(template, shot_spec, rag_examples, memories)
+        # ④ 执行
+        result = await comfyui.submit(workflow, prompt=prompt)
+        # ⑤ 高分结果沉淀为新记忆
+        if result.quality_score > 9.0:
+            await self.save_memory(key=f"character_{character_id}_prompt_pattern", value=...)
+        return result
+```
+
+## 2.6 平台职责分工——OpenClaw / LangGraph / K8s各司其职
+
+| 能力需求 | 实现方式 | 说明 |
+|---------|---------|------|
+| Agent逻辑执行 | **LangGraph + 自建AgentRuntime** | StateGraph编排 + Agent类封装决策循环 |
+| 状态机流转 | **LangGraph** | 条件边、打回路由、人审等待 |
+| Agent记忆 | **PostgreSQL agent_memory表 + RAG Qdrant** | 短期→State / 中期→PG / 长期→Qdrant |
+| 定时触发（每日反思/每周进化） | **K8s CronJob** | 触发Evolution Engine不同模式 |
+| 事件驱动（阈值触发LoRA/成本预警） | **RocketMQ延迟消息 + Supervisor监听** | |
+| 审核界面（看片+批注） | **OpenClaw** | OpenClaw最擅长的领域 |
+| 审核任务管理 | **OpenClaw** | ReviewTask创建/分配/状态 |
+| 飞书Bot（人机对话） | **Agent Gateway (FastAPI)** | orchestrator Pod中的webhook |
+
+**OpenClaw不包裹Agent，而是做它最擅长的事——审核界面和任务管理。** Agent运行时由LangGraph+自建AgentRuntime驱动，避免将核心生产逻辑绑定在单一第三方框架上。
+
+---
+
+# 第三章 项目集与发行需求管理
+
+## 3.1 三层需求体系
+
+```
+项目集（ProjectGroup）
+  │  一批剧共享的发行平台约束（如"YouTube Shorts 2026Q2"）
+  │  定义：画幅/时长/编码/合规红线/风格偏好
+  │
+  ├── 项目A（Project）
+  │     继承项目集约束 + 自有特殊需求（品牌素材/合作方要求）
+  │
+  ├── 项目B（Project）
+  │     继承同一项目集 + 不同的特殊需求
+  │
+  └── 项目C ...
+```
+
+## 3.2 数据结构
+
+```typescript
+interface ProjectGroup {
+  group_id: string;
+  name: string;                         // "YouTube Shorts 2026Q2"
+  platform: string;                     // "youtube_shorts" | "tiktok" | "reels"
+
+  // 发行平台硬约束（不可违反）
+  platform_constraints: {
+    aspect_ratio: AspectRatio;
+    max_duration_sec: number;
+    min_duration_sec: number;
+    max_file_size_mb: number;
+    video_codec: string;
+    fps: number;
+    subtitle_style: "hardcode" | "srt" | "none";
+    watermark_required: boolean;
+    content_rating: string;             // "PG-13"
+  };
+
+  // 风格偏好（软约束）
+  style_preferences: {
+    pacing: "fast" | "medium" | "slow";
+    hook_duration_sec: number;          // 前N秒必须抓眼球
+    cliffhanger_required: boolean;
+    bgm_loudness_ratio: number;
+    text_overlay_style?: string;
+  };
+
+  // 合规红线（硬约束）
+  compliance_rules: {
+    forbidden_content: string[];        // ["暴力血腥", "烟酒"]
+    required_disclaimers?: string[];    // ["AI Generated Content"]
+    music_copyright: "royalty_free_only" | "licensed_ok";
+  };
+}
+
+interface ProjectRequirements {
+  project_id: string;
+  group_id: string;                     // 所属项目集
+
+  // 项目特殊需求（覆盖或补充项目集）
+  overrides: {
+    special_instructions: string;       // "合作方要求片头3秒品牌动画"
+    brand_assets?: {
+      logo_url?: string;
+      intro_video_url?: string;
+      outro_video_url?: string;
+    };
+    target_audience_notes?: string;
+    partner_review_required: boolean;
+  };
+}
+```
+
+## 3.3 Supervisor Agent的项目需求校验机制
+
+Supervisor Agent（合并了原Cost Controller + PM Agent）在关键checkpoint同时校验成本和项目需求：
+
+| 检查点 | 成本校验 | 项目需求校验 | 检查方式 |
+|--------|---------|------------|---------|
+| N02完成后 | 镜头数→估算总成本 | 时长在平台约束范围内？节奏符合偏好？ | 规则引擎 |
+| N05完成后 | S2占比→成本风险评估 | 是否有违反合规红线的内容描述？ | 规则+LLM |
+| N09完成后 | 美术候选数→成本 | 画风是否符合平台调性？品牌色匹配？ | LLM多模态 |
+| N14/N17 | 实时累计成本vs预算 | 分辨率/画幅/编码/时长符合硬约束？ | 规则引擎 |
+| N23完成后 | 单集总成本结算 | 所有platform_constraints满足？水印/disclaimer正确？ | 规则+LLM |
+
+校验不通过 → 自动生成QualityIssue → 路由到对应节点修正。
+
+---
+
+# 第四章 Prompt资产库——管线的核心知识资产
+
+> **设计理念**：所有环节的Prompt都不固化为只有一版。每个Prompt有一个「母版」，但Agent可以根据当前题材类型、风格要求、历史案例进行差异化适配。Prompt库是公司的核心资产。
+
+## 4.1 Prompt三层架构
+
+```
+第1层：母版（Master Template）
+  │  稳定的结构骨架 + 通用规则 + 输出Schema约束
+  │  由人类确认后锁定，Agent不可自主修改
+  │
+第2层：题材适配层（Genre Adapter）
+  │  按题材/风格动态注入的差异化指令
+  │  Agent可在母版基础上自动适配
+  │  示例："古装宫斗"适配器 → 注入古装场景描述规范、服饰术语、光照偏好
+  │  示例："现代悬疑"适配器 → 注入都市场景、冷色调偏好、快节奏剪辑指令
+  │
+第3层：实例适配层（Instance Adapter）
+  │  针对当前具体镜头，由Agent实时组装
+  │  注入RAG检索到的同类成功案例（few-shot）
+  │  注入当前角色/场景的具体参数
+  │  每一帧的prompt都是独一无二的
+```
+
+## 4.2 Prompt库数据结构
+
+```typescript
+interface PromptAsset {
+  prompt_id: string;
+  agent_name: string;                  // 归属Agent
+  prompt_stage: string;                // "script_parse" | "shot_design" | "visual_prompt" | "qc_review" | ...
+  
+  // === 母版 ===
+  master_template: {
+    version: string;                   // "v3.2"
+    system_prompt: string;
+    output_schema_ref: string;         // 指向schema-contracts.md中的类型
+    locked_by: string;                 // 锁定确认人
+    locked_at: string;
+  };
+  
+  // === 题材适配器库 ===
+  genre_adapters: {
+    genre_tag: string;                 // "古装宫斗" | "现代悬疑" | "甜宠" | ...
+    adapter_prompt: string;            // 注入到system_prompt的差异化片段
+    few_shot_examples: RAGCaseRef[];   // 关联的经典案例
+    style_keywords: string[];          // 影响visual_prompt的风格关键词
+    created_by: "human" | "agent";
+    performance_stats: {
+      total_uses: number;
+      avg_qc_score: number;
+      human_approval_rate: number;
+    };
+  }[];
+  
+  // === 版本历史 ===
+  version_history: PromptVersion[];
+}
+```
+
+## 4.3 生图环节的Prompt确保机制
+
+生图环节（关键帧、视频）每一帧的prompt都不同，确保最优参考的机制如下：
+
+```
+Visual Director为某个ShotSpec生成visual_prompt时：
+
+1. 加载母版（通用生图规范 + negative_prompt标准集）
+2. 加载题材适配器（"古装宫斗" → 古装术语/光照/构图偏好）
+3. RAG检索：
+   a. 用ShotSpec的标签（shot_type + camera_movement + emotion + difficulty）做向量检索
+   b. 从Prompt库中召回TOP-3最相似且评分≥9.0的历史prompt
+   c. 作为few-shot示例注入
+4. 注入当前实例参数：
+   - 角色外貌描述（从CharacterProfile）
+   - 场景描述（从LocationProfile）
+   - 服装（从CostumeSet）
+   - 具体动作/表情/站位（从ShotSpec）
+5. Agent组装最终prompt，发送给ComfyUI
+6. 生成结果的prompt + 评分 → 写入Prompt库，供未来检索
+```
+
+---
+
+# 第五章 自进化系统
+
+## 5.1 进化飞轮
+
+```
+生产运行（每天）
+  ↓ 收集信号：质检评分 + 审核决策 + 打回原因 + 成本数据
+Evolution Engine · 每日反思模式
+  ↓ 发现模式，定位根因Agent和Prompt
+Evolution Engine · 每周进化模式
+  ↓ 生成prompt变体 → A/B测试 → 选最优
+人类确认（每周，5分钟）→ 全量替换
+  ↓
+Evolution Engine · 持续入库模式 → 优质案例作为future few-shot
+  ↓
+Evolution Engine · 按条件训练模式 → LoRA微调 → 模型底层进化
+  ↓
+新一轮生产（质量更高、打回率更低）→ 循环
+```
+
+> 四个模式在同一个Agent内串联，问题发现后直接在同一上下文中驱动优化，无需跨Agent序列化交接。
+
+## 5.2 RAG经验库——全链路关联与可检索化
+
+### 4.2.1 核心设计：链路级RAG，非碎片级RAG
+
+Quality Inspector评分≥9.0的镜头，其完整生成链路需要被关联且可被RAG化。设计如下：
+
+```typescript
+interface RAGChainCase {
+  chain_id: string;                    // 链路唯一ID
+  quality_score: number;               // ≥9.0才入库
+  case_type: "positive" | "negative" | "corrective";
+  
+  // === 全链路碎片资产，通过chain_id关联 ===
+  chain_assets: {
+    script_fragment: string;           // 原始剧本片段
+    shot_spec: ShotSpec;               // 分镜规格
+    visual_prompt: string;             // 使用的画面prompt
+    negative_prompt: string;
+    generation_params: Record<string, any>;  // ComfyUI参数
+    keyframe_images: StorageRef[];     // 生成的关键帧图
+    video: StorageRef;                 // 生成的视频
+    audio_config: {                    // 音频配置
+      tts_params: any;
+      bgm_style: string;
+      sfx_tags: string[];
+    };
+    qc_scores: QualityScore;          // 各维度评分
+    human_feedback?: string;           // 人类审核意见
+  };
+  
+  // === 检索标签（用于向量+标签混合检索）===
+  retrieval_tags: {
+    genre: string;
+    scene_type: string;               // "多人对话" | "动作打斗" | "独白特写" | ...
+    emotion: EmotionTag;
+    difficulty: ShotDifficulty;
+    shot_type: ShotType;
+    camera_movement: CameraMovement;
+    character_count: number;
+    has_dialogue: boolean;
+    location_type: string;            // "室内宫殿" | "户外街市" | ...
+  };
+  
+  // === 向量embedding ===
+  embedding_visual_prompt: number[];   // visual_prompt的向量（用于语义检索）
+  embedding_script_fragment: number[]; // 剧本片段的向量
+  
+  // === 元信息 ===
+  source_project_id: string;
+  source_episode: number;
+  source_shot_id: string;
+  created_at: string;
+  retrieval_count: number;            // 被检索引用次数
+}
+```
+
+### 4.2.2 入库流程
+
+```
+每个镜头生成完成 + 质检评分完成后：
+  │
+  ├── 评分 ≥ 9.0 → 自动入库（positive案例）
+  ├── 审核员标记"优秀" → 入库（positive，权重更高）
+  ├── 审核员标记"典型错误" → 入库（negative案例）
+  └── 审核员打回后修改成功 → 入库（corrective案例，含before/after对比）
+
+入库时Evolution Engine自动执行：
+  1. 关联全链路资产（通过shot_id串联所有碎片）
+  2. 生成retrieval_tags（从ShotSpec提取）
+  3. 生成embedding向量（visual_prompt + script_fragment）
+  4. 写入Qdrant向量数据库
+  5. 更新Prompt库中对应genre_adapter的performance_stats
+```
+
+### 4.2.3 检索策略
+
+```
+Agent需要参考时（如Visual Director写prompt）：
+  1. 标签预筛：genre + scene_type + difficulty + shot_type
+  2. 向量语义检索：用当前任务的描述做nearest neighbor
+  3. 评分排序：优先推高分+高检索次数的案例
+  4. 返回TOP-3作为few-shot注入
+  5. 如果是negative案例 → 作为"避免这样做"的counter-example
+```
+
+## 5.3 LoRA训练数据与RAG数据的关系
+
+**共享数据来源，但形态和用途不同：**
+
+| 维度 | RAG数据 | LoRA训练数据 |
+|------|--------|-------------|
+| 存储 | Qdrant向量库，在线实时检索 | 文件系统，离线训练用 |
+| 格式 | RAGChainCase（链路+embedding） | instruction-tuning（input→output对） |
+| 用途 | 检索→注入prompt作为few-shot | 训练→修改模型权重 |
+| 更新频率 | 持续入库 | 月级批量训练 |
+| 数据量 | 越多越好（10,000+） | 精选子集（500-2000条最优） |
+| 质量门槛 | ≥9.0 | ≥9.5 + 人审标记"优秀" |
+| 类比 | 查字典——遇到问题翻参考 | 内化知识——参考变成本能 |
+
+Evolution Engine(按条件训练模式)准备训练数据时，从RAG库中筛选转换：RAG库(10,000条,≥9.0) → 筛选(≥9.5+人审) → 格式转换(instruction-tuning) → 去重+多样性采样 → 最终训练集(1,000条)。
+
+## 5.4 LoRA自动化微调
+
+### 4.3.1 自动化触发机制
+
+```typescript
+interface LoRAAutoTrainConfig {
+  // === 触发条件（全部满足才启动）===
+  trigger_conditions: {
+    min_positive_cases: number;        // RAG库中positive案例 ≥ 此数才触发（默认1000）
+    min_genre_coverage: number;        // 至少覆盖N种场景类型（默认5）
+    min_days_since_last_train: number; // 距上次训练至少N天（默认30）
+    human_approval_rate_plateau: boolean; // 审核通过率连续2周无提升时触发
+  };
+  
+  // === 自动化流程 ===
+  pipeline: {
+    step_1_data_prep: {
+      source: "rag_positive_cases";
+      filter: "quality_score >= 9.0 AND human_feedback != 'negative'";
+      format: "instruction_tuning";    // 格式化为input→output对
+      train_test_split: 0.9;
+      max_samples: 5000;
+    };
+    step_2_train: {
+      base_model: string;              // "Qwen3-32B" 或 "ACE-Step-1.5"
+      method: "lora";
+      rank: 16;
+      learning_rate: 2e-5;
+      epochs: 3;
+      gpu: "4090D";                    // 单卡即可
+      estimated_time: "2-4小时";
+    };
+    step_3_evaluate: {
+      holdout_set_size: 100;
+      metrics: ["qc_pass_rate", "human_approval_rate", "diversity_score"];
+      min_improvement: 0.05;           // 相比baseline至少提升5%才采用
+    };
+    step_4_deploy: {
+      approval_required: true;         // 需人确认
+      rollback_window_days: 7;         // 7天观察期，可随时回滚
+      a_b_test_ratio: 0.2;            // 先20%流量验证
+    };
+  };
+}
+```
+
+### 4.3.2 可微调的模型
+
+| 模型 | 微调目的 | 训练数据来源 | GPU | 频率 |
+|------|---------|------------|-----|------|
+| Qwen3-32B（本地兜底LLM） | 分镜设计专业化 | RAG正向案例 | 4090D单卡 | 每月 |
+| ACE-Step 1.5（BGM） | 题材风格LoRA | 20-50首参考BGM/风格 | 4090D单卡 | 按题材需求 |
+| FLUX.2 Dev（生图，远期） | IP视觉风格统一 | 固化美术资产 | L40S/A800 | 远期按需 |
+
+---
+
+# 第六章 Agent自动迭代机制
+
+## 6.1 基于K8s CronJob + OpenClaw的自动化触发
+
+Evolution Engine的四种模式由K8s CronJob和事件驱动自动触发：
+
+```
+┌──────────────────────────────────────────────────────┐
+│  自动化触发规则                                        │
+│                                                       │
+│  规则1: 每日00:00 (K8s CronJob)                       │
+│    → Evolution Engine(每日反思模式)                    │
+│    → 扫描当日质检+审核日志 → 推送飞书日报              │
+│                                                       │
+│  规则2: 每周一09:00 (K8s CronJob)                     │
+│    → Evolution Engine(每周进化模式)                    │
+│    → 生成prompt变体 → A/B测试 → 结果推送飞书          │
+│                                                       │
+│  规则3: RAG库案例跨越阈值 (RocketMQ事件)              │
+│    → Evolution Engine(按条件训练模式)                  │
+│    → 评估是否启动LoRA → 推送确认                      │
+│                                                       │
+│  规则4: 单集成本超过红线150% (Supervisor事件)          │
+│    → Supervisor启动低成本方案A/B测试                   │
+│    → 测试结果推送飞书                                  │
+│                                                       │
+│  规则5: 审核通过率连续2周无提升 (Supervisor检测)       │
+│    → Evolution Engine深度分析瓶颈                      │
+│                                                       │
+└──────────────────────────────────────────────────────┘
+```
+
+## 6.2 Evolution Engine的A/B测试流程
+
+```
+Step 1: 每日反思模式发现问题
+  "古装夜景的光照一致性打回率从5%升到18%"
+
+Step 2: 每周进化模式生成3-5个变体
+  v3.3a: 增加"烛光约束"硬规则
+  v3.3b: 增加3个古装夜景的few-shot
+  v3.3c: 两步式结构（先规划光源，再描述画面）
+  v3.3d: 综合a+b
+
+Step 3: 从测试剧本库中抽取30个同类场景
+  （见6.3节测试剧本机制）
+
+Step 4: 各变体并行生成 → Quality Inspector自动打分
+
+Step 5: 统计结果，选最优 → 推送飞书确认
+
+Step 6: 人确认后全量替换，旧版归档
+```
+
+## 6.3 测试剧本库——不影响主线的迭代验证
+
+> 类比代码的dev/staging/production分支机制。
+
+```
+┌─────────────────────────────────────────────┐
+│  测试分支（test branch）                      │
+│                                               │
+│  测试剧本库：10-20个备用剧本片段              │
+│    ├── 古装宫斗×3片段                         │
+│    ├── 现代悬疑×3片段                         │
+│    ├── 甜宠轻喜×2片段                         │
+│    ├── 动作冒险×2片段                         │
+│    └── 边缘case×3片段（极端场景）             │
+│                                               │
+│  A/B测试在测试分支上执行                       │
+│  使用独立的test_project_id                    │
+│  结果不写入主线RAG库                          │
+│  GPU资源使用低优先级队列                       │
+│                                               │
+│  测试通过后 → prompt版本晋升到生产分支        │
+│  测试失败 → 丢弃变体，不影响任何主线任务      │
+│                                               │
+└─────────────────────────────────────────────┘
+```
+
+---
+
+# 第七章 人机交互
+
+## 7.1 人类角色
+
+| 角色 | 职责 | 日均耗时 |
+|------|------|---------|
+| **管线总监** | 战略决策 + 进化确认 + 飞书问答 | 15-30分钟 |
+| **审核员**（1-2人） | 看片 + 自然语言批注 + 提交 | 每人3-4小时 |
+
+**审核员不做的事**：不写prompt、不调参数、不手动生成、不管任何技术细节。
+
+## 7.2 四个审核节点
+
+### Gate 1：美术资产审核（N08）
+- 粒度：资产级（角色/场景/道具/音色）
+- 人选择最佳候选，或自然语言批注打回
+- 支持单个资产独立打回
+- **同步确认核心角色音色**（Audio Director在此阶段已生成候选音色样本）
+
+### Gate 2：视觉素材审核（N18）
+- 粒度：Shot级时间轴
+- AI已自动推荐最高分候选（标记"智能选择"）
+- 人可逐Shot确认或批注，支持"全部接受AI推荐"快速通过
+- **批注→Review Dispatcher自动拆解→Agent执行→推新版**
+
+### Gate 3：视听整合审核（N21）
+- 粒度：集级
+- 视频锁定，音频可调
+- 人批注整体感受 → Agent自动调整BGM/SFX/节奏
+
+### Gate 4：成片终审（N24）
+- 三步串行：质检员（可跳）→ 剪辑中台（必选）→ 合作方（必选）
+- 打回路由到对应环节
+
+## 7.3 审核效率目标
+
+| 指标 | 第1月 | 第3月 | 第6月 |
+|------|:---:|:---:|:---:|
+| 人均审核时间/集 | 29分钟 | 22分钟 | 15分钟 |
+| 快速确认率（直接接受AI推荐） | 30% | 55% | 75% |
+| 质检自动通过率 | 70% | 80% | 88% |
+
+---
+
+# 第八章 节点规格总表
+
+> 完整的节点详细规格见 `node-spec-sheet.md`。此处仅列关键属性。
+> 选型与node-spec-sheet保持一致。Audio Director职责更新为两阶段介入。
+
+## 8.0 节点 ↔ 负责Agent对照表
+
+每个Agent负责2-8个节点，跨节点保持策略一致性。例如Visual Director从N06策划到N17定稿，整个视觉链条由同一Agent统筹——它知道N06做了什么决策，N10/N14/N17可以保持连贯。
+
+| Agent | 负责节点 | 核心统筹职责 |
+|-------|---------|-------------|
+| **Script Analyst** | N01 | 剧本理解+结构化提取+分集骨架 |
+| **Shot Designer** | N02, N04, N05, N16, N16b | 分镜设计→定稿→分级→节奏调整，叙事节奏全链路 |
+| **Visual Director** | N06, N07, N09, N10, N13, N14, N17, N19 | 视觉策划→美术生成→关键帧→视频→定稿，视觉质量全链路 |
+| **Audio Director** | N07b, N20, N22 | 音色生成→TTS/唇同步/BGM/SFX→视听定稿 |
+| **Quality Inspector** | N03, N11, N12, N15 | 分镜质检→关键帧质检→连续性→视频质检 |
+| **Compositor** | N16b(协作), N23, N25, N26 | 影调调整(协作)→成片合成→定稿→分发 |
+| **Review Dispatcher** | N08, N18, N21, N24 | 所有Gate节点的审核批注解析→任务拆分→执行调度 |
+| **Supervisor** | 横切(N02/N05/N09/N14/N17/N23) | 成本监控+项目需求校验+预算分配+降级触发+合规检查 |
+| **Evolution Engine** | 后台（四模式） | 每日反思→每周prompt进化→持续RAG管理→按条件LoRA训练 |
+
+## 8.1 Stage 1 · Script 脚本阶段
+
+| 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
+|:---:|------|------|------|------|:---:|:---:|---------|
+| **N01** | 主剧本结构化解析 | .docx预处理后的RawScriptInput | ParsedScript（世界观+角色+场景+分集骨架） | Gemini 3.1 | 1 | ✗ | 粒度到场景级，含docx预处理子步骤 |
+| **N02** | LLM拆集拆镜 | ParsedScript + episode_index | EpisodeScript（场景→镜头级，30-60 shots/集） | Gemini 3.1 | 1 | ✗ | 按集逐个调用；visual_prompt全英文；keyframe_specs只出骨架 |
+| **N03** | 分镜质检 | EpisodeScript | QualityScore + QualityIssue[] + pass/reject | GPT5.4+Gemini3.1+Opus4.6 三模型 | 1 | ✗ | 去极值取平均，阈值8.0；<8.0打回N02(max 3) |
+| **N04** | 分镜定稿 | EpisodeScript + N03质检结果 | EpisodeScript(frozen) | Gemini 3.1 | 1 | ✗ | 无issue→跳过LLM直接盖章；锁定dialogue/shot_type/camera/duration |
+| **N05** | 镜头分级标注 | EpisodeScript(frozen) | EpisodeScript + difficulty(S0/S1/S2) + qc_tier | Gemini 3.1 | 1 | ✗ | 关键节点即使S0也提升tier_1 |
+
+## 8.2 Stage 2 · Art 美术阶段
+
+| 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
+|:---:|------|------|------|------|:---:|:---:|---------|
+| **N06** | 视觉元素策划 | 定稿分镜+角色/场景档案 | ArtGenerationPlan（prompt+workflow+参考策略） | Gemini 3.1 | — | ✗ | **只策划不生成图**；含ComfyUI workflow JSON |
+| **N07** | 美术资产图生成 | ArtGenerationPlan | CandidateSet\<ArtAssetCandidate\>[] | FLUX.2 Dev + Z-Image-Turbo (ComfyUI) | 主角4-6/配角2-3/群演1-2/场景2-3 | ✗ | 角色1024×1536 / 场景1920×1080 |
+| **N07b** | 核心角色音色生成 | CharacterProfile[] + voice_config需求 | CandidateSet\<VoiceSample\>[] | CosyVoice / ElevenLabs | 每角色2-3 | ✗ | Audio Director在此生成音色候选，与N07并行 |
+| **N08** | **Gate Stage1** 美术资产审核 | 角色/场景/道具/音色候选 | 选定candidate_id + 修改意见 | — | — | **✓** | 支持单资产打回；自然语言改图；同步确认音色 |
+| **N09** | 美术资产定稿 | N08选定+ArtPlan | FrozenArtAsset[]（FireRed全套变体） | FireRed-1.1 MultiRef (ComfyUI) | — | ✗ | 角色:FireRed固化全套；场景:直接固化 |
+
+## 8.3 Stage 3 · Keyframe 关键帧阶段
+
+| 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
+|:---:|------|------|------|------|:---:|:---:|---------|
+| **N10** | 关键帧生成 | ShotSpec + FrozenArtAsset + ArtPlan | CandidateSet\<ShotVisualCandidate\> | FLUX.2 Dev + FireRed (ComfyUI) | S0→1-2/S1→2-3/S2→3-4 | ✗ | per shot并行；ControlNet按shot_type自动选；2K分辨率 |
+| **N11** | 关键帧质检 | 候选关键帧 + FrozenArtAsset参考 | QualityScore + 选定最佳候选 | 按qc_tier动态选模型数 + ReActor/FaceID | — | ✗ | 加权总分<7.5打回N10(max 3)；自动选最高分 |
+| **N12** | 跨镜头连续性检查 | 全集选定关键帧（按序） | ContinuityReport | Gemini 3.1 (多模态) | — | ✗ | 多图理解分析角色一致/场景切换/节奏 |
+| **N13** | 关键帧定稿 | 选定关键帧 + ContinuityReport | FrozenKeyframe[] | FireRed Edit(条件调用) | — | ✗ | 无issue→直接固化；有issue→FireRed微调 |
+
+## 8.4 Stage 4 · Video 视频阶段
+
+| 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
+|:---:|------|------|------|------|:---:|:---:|---------|
+| **N14** | 视频素材生成 | FrozenKeyframe + ShotSpec + FrozenAssets | CandidateSet\<VideoCandidate\> | LTX-2.3 (默认) + HuMo(S2条件) | S0→1-2/S1→2-3/S2→3-4 | ✗ | 1080p；生成略长+0.5~1s |
+| **N15** | 视频质检 | VideoCandidate[] + 参考资产 | QualityScore + 选定候选 | 按qc_tier + ReActor/Physics | — | ✗ | 加权<7.5打回；单维度<5直接打回 |
+| **N16** | 剧情节奏连续性 | 全集选定视频（按序） | PacingReport | Gemini 3.1 (多模态) | — | ✗ | 节奏分析+剪辑建议+时长偏差 |
+| **N16b** | 影调与节奏调整 | FrozenVideo[] + PacingReport + EpisodeScript | 调整后的视频序列 + 更新的时间轴 | FFmpeg(剪辑) + Gemini 3.1(决策) | — | ✗ | 调整镜头长短/影调一致化/转场；与TTS同阶段 |
+| **N17** | 视频定稿 | 调整后视频 | FrozenVideo[]（含超分） | RealESRGAN/Topaz(超分) + FFmpeg | — | ✗ | 超分；单集≤500MB |
+| **N18** | **Gate Stage2** 视觉素材审核 | 全集Shot视频 | ReviewTask per shot | — | — | **✓** | Shot级时间轴审核；打回→N14重做 |
+| **N19** | 视觉素材定稿 | N18通过 | frozen视觉素材 | — | — | ✗ | 纯固化 |
+
+## 8.5 Stage 5 · AV 视听阶段
+
+| 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
+|:---:|------|------|------|------|:---:|:---:|---------|
+| **N20** | 视听整合 | FrozenVideo[] + EpisodeScript + CharacterProfile | AVTrackSet（五轨道） | CosyVoice/ElevenLabs(TTS) + LatentSync(唇同步) + ACE-Step 1.5(BGM) + HunyuanFoley(SFX) | — | ✗ | TTS按语言切换；LatentSync失败降级；字幕生成(文本+STT对轴，烧录) |
+| **N21** | **Gate Stage3** 视听整合审核 | AVTrackSet完整播放 | 通过/打回 | — | — | **✓** | 集级；视频锁定/音频可调；分轨静音 |
+| **N22** | 视听定稿 | N21通过 | frozen视听产物 | — | — | ✗ | 固化+STT校验 |
+
+## 8.6 Stage 6 · Final 成片阶段
+
+| 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
+|:---:|------|------|------|------|:---:|:---:|---------|
+| **N23** | 成片整合 | AVTrackSet + EpisodeScript | FinalEpisode（横屏+竖屏） | FFmpeg(主)+ComfyUI VHS(辅) | — | ✗ | 合成+转场+字幕烧录+水印+高光闪回；H.264；≤500MB |
+| **N24** | **Gate Stage4** 成片终审 | FinalEpisode | 三步串行通过/打回 | — | — | **✓** | 质检(可跳)→中台(必选)→合作方(必选，脱敏) |
+| **N25** | 成片定稿 | N24三步全通过 | status=delivered | — | — | ✗ | 固化+归档保留策略 |
+| **N26** | 分发推送 | FinalEpisode + DistributionConfig | DistributionRecord[] | 平台API(TikTok/飞书/YouTube) | — | ✗ | config驱动；auto_publish or draft |
+
+## 8.7 与node-spec-sheet.md的差异说明
+
+| 变更 | 说明 |
+|------|------|
+| 新增N07b | Audio Director在美术阶段并行生成核心角色音色候选，与N07同时执行 |
+| 新增N16b | 视频定稿前增加影调一致化+节奏调整环节，与TTS同阶段 |
+| 新增Review Dispatcher | 从human_review_entry角色中独立，专职解析自然语言批注并拆分执行任务 |
+| Cost Controller+PM Agent→Supervisor | 合并为单一横切守卫，同时校验成本和项目需求 |
+| 4个进化Agent→Evolution Engine | Reflection+Prompt Evolver+RAG Curator+Style Trainer合并，消除3次序列化交接 |
+| N20音频模型更新 | BGM从Stable Audio 2.5更新为ACE-Step 1.5；SFX从音效库匹配更新为HunyuanVideo-Foley自动生成+库兜底 |
+| 唇同步更新 | LatentSync 1.5为主力，Sync Labs API做质量兜底 |
+| 所有LLM统一闭源 | v1阶段不使用Qwen3-32B/Qwen3-Max等开源模型做主力（本地仅作兜底） |
+
+---
+
+# 第九章 技术选型汇总
+
+## 9.1 GPU配置（实际采购价）
+
+| GPU | 数量 | 平台 | 月成本 | 用途 |
+|-----|:---:|------|:---:|------|
+| **A800 80GB** | 8卡 | 火山引擎 | **¥25,000** | 视频生成(LTX-2.3) + 关键帧(FLUX+FireRed) + SFX(HunyuanFoley) |
+| **RTX 4090D** | 8卡 | 火山引擎 | **¥12,000** | TTS(CosyVoice) + 唇同步(LatentSync) + BGM(ACE-Step) + LLM本地兜底(Qwen3-32B) + LoRA训练 |
+| **合计** | **16卡** | | **¥37,000/月** | |
+
+> 说明：A800 80GB覆盖所有≥32GB显存需求的模型（LTX-2.3 FP8需32GB+，FireRed BF16需30-40GB，HunyuanFoley XL需40GB+）。4090D 24GB覆盖所有轻量模型。
+
+## 9.2 基础设施（全部火山引擎）
+
+| 组件 | 火山引擎产品 | 说明 |
+|------|------------|------|
+| GPU云服务器 | ECS GPU实例 | A800 + 4090D |
+| 对象存储 | TOS（对象存储） | 所有生成资产 |
+| 关系数据库 | RDS PostgreSQL | 项目/任务/审核元数据 |
+| 缓存 | Redis | Agent间通信 + 状态缓存 |
+| 消息队列 | RocketMQ | 异步任务调度 |
+| 向量数据库 | Qdrant（自部署在ECS上） | RAG知识库 |
+| 容器编排 | VKE（容器服务） | ComfyUI集群编排 |
+| 监控 | 云监控 + Prometheus/Grafana | GPU利用率/队列/成本 |
+| CDN | CDN | 成片分发加速 |
+
+## 9.3 闭源API接入
+
+| 模型 | 接入方式 | 用途 |
+|------|---------|------|
+| Gemini 3.1 | DMXAPI(主) + OpenRouter(备) | 剧本/分镜/策划/多模态分析 |
+| Claude Opus 4.6 | DMXAPI(主) + OpenRouter(备) | 备选推理 + 进化反思 |
+| GPT 5.4 | DMXAPI(主) + OpenRouter(备) | 质检投票 |
+| ElevenLabs | 官方API | 英文TTS |
+
+## 9.4 成本预算
+
+| 项目 | 月成本 | 备注 |
+|------|:---:|------|
+| GPU（A800×8 + 4090D×8） | ¥37,000 | 固定成本 |
+| 闭源LLM API | ¥8,000-15,000 | 按日产300分钟估算 |
+| 火山引擎基础设施（TOS/RDS/MQ等） | ¥3,000-5,000 | |
+| ElevenLabs TTS API | ¥2,000-5,000 | 按英文对白量 |
+| **总计** | **¥50,000-62,000** | |
+| **折算每分钟成本** | **¥5.6-6.9** | 日产300分钟×30天 |
+
+---
+
+# 第十章 K8s部署架构（火山引擎VKE）
+
+## 10.1 核心设计：Agent是逻辑概念，不是物理服务
+
+10个Agent不需要10个独立服务。Agent是Python类/模块，通过消息队列接收任务分发。按职责和资源需求分为5组部署。
+
+## 10.2 部署分组
+
+### 第1组：调度层（轻量，常驻）
+
+| Deployment | 包含Agent | Replicas | Resources | 说明 |
+|-----------|----------|:---:|------|------|
+| `orchestrator` | LangGraph框架 + Supervisor + Compositor | 2 | 2C4G/pod，无GPU | 状态机调度 + Agent Gateway(FastAPI) + 飞书Bot webhook + 横切守卫（规则引擎为主，偶尔LLM） |
+
+### 第2组：LLM调用层（轻量，弹性伸缩）
+
+| Deployment | 包含Agent | Replicas | Resources | 说明 |
+|-----------|----------|:---:|------|------|
+| `llm-agents` | Script Analyst, Shot Designer, Visual Director(策划), Audio Director(策划), Quality Inspector, Review Dispatcher, Evolution Engine | 3-8 | 1C2G/pod，无GPU | 纯API调用+JSON处理，通过RocketMQ接收任务 |
+
+### 第3组：ComfyUI GPU工作节点（按需扩缩）
+
+| StatefulSet | GPU | Replicas | 运行服务 |
+|------------|-----|:---:|------|
+| `comfyui-a800` | A800 80GB × 1/pod | 8 | ComfyUI API(FLUX+FireRed+LTX-2.3+HunyuanFoley) |
+| `comfyui-4090d` | 4090D 24GB × 1/pod | 8 | CosyVoice + LatentSync + ACE-Step + Qwen3-32B(兜底) |
+
+### 第4组：数据层（有状态，常驻）
+
+| StatefulSet | Replicas | 说明 |
+|------------|:---:|------|
+| `postgresql` | 2（主从） | 项目/任务/审核元数据 |
+| `redis` | 3（哨兵） | 状态缓存 + Agent间通信 |
+| `qdrant` | 1-2 | RAG向量数据库 |
+| RocketMQ | 火山引擎托管版 | 异步任务调度 |
+
+### 第5组：前端（轻量，常驻）
+
+| Deployment | Replicas | 说明 |
+|-----------|:---:|------|
+| `web-frontend` | 2 | OpenClaw审阅页面 |
+
+## 10.3 飞书Bot与Agent的关系
+
+飞书Bot和管线Agent是两层不同的东西：
+
+**管线Agent**——负责干活（LangGraph中的Node），运行在llm-agents Pod里。
+**飞书Bot**——消息收发接口，部署在orchestrator Pod中。
+
+```
+飞书群@某Agent → 飞书Bot Webhook → Agent Gateway → 路由到对应Agent的"对话模式"
+                                                      │
+                                        ┌──────────────┼──────────────┐
+                                        │              │              │
+                                  生产模式         对话模式        状态查询
+                                (LangGraph        (调LLM回答     (查DB/日志
+                                 正常流转)         人的问题)       返回统计)
+```
+
+飞书Bot只需FastAPI webhook，不需要OpenClaw Agent框架。OpenClaw在管线中的角色是**审核界面**（审核员看片+批注），不是Agent运行时。
+
+## 10.4 服务间通信
+
+```
+orchestrator ←→ RocketMQ ←→ llm-agents
+                   ↕
+            comfyui-a800 / comfyui-4090d
+                   ↕
+               TOS(资产存储)
+```
+
+所有Agent通过RocketMQ异步通信。llm-agents收到任务 → 调闭源API/处理逻辑 → 如需生成图/视频 → 投递ComfyUI任务到队列 → ComfyUI节点消费执行 → 结果写TOS → 回调llm-agents继续流转。
+
+---
+
+# 第十一章 进化效果度量
+
+| 指标 | 第1月 | 第3月 | 第6月 |
+|------|:---:|:---:|:---:|
+| 质检自动通过率 | 70% | 80% | 88% |
+| 人类审核一次通过率 | 65% | 78% | 85% |
+| 快速确认率 | 30% | 55% | 75% |
+| Prompt版本迭代速度 | 手动 | 每周1-2次 | 每周2-3次 |
+| RAG库规模 | 0 | 3,000+ | 10,000+ |
+| 人均审核时间/集 | 29分钟 | 22分钟 | 15分钟 |
+| 每分钟成本 | ¥6.9 | ¥6.0 | ¥5.5 |
+
+---
+
+# 第十二章 关键风险与缓解
+
+| 风险 | 缓解措施 |
+|------|---------|
+| Prompt进化刷分不提质 | A/B测试必须含人类审核通过率指标；测试在test branch执行不影响主线 |
+| RAG库低质案例污染 | Evolution Engine持续入库模式定期清洗；被多次打回的案例来源关联数据自动降权 |
+| LoRA过拟合 | holdout验证多样性；微调后保留原始模型fallback；20%流量先验证 |
+| 闭源API故障 | 双平台冗余(DMXAPI+OpenRouter)；Qwen3-32B本地作最终兜底 |
+| GPU供应波动 | A800+4090D双机型互补；ComfyUI API统一接口，迁移成本低 |
+| 审核员疲劳 | 随机插入已知正确/错误测试样本监测准确率；提升快速确认率减轻负担 |
+| 成本超出预期 | Supervisor实时监控+预警；超150%红线自动触发低成本A/B测试 |
+| 单一题材经验不适用新题材 | RAG按genre隔离；新题材首批人工加密审核，快速积累该题材案例 |
+
+---
+
+# 第十三章 后续执行计划
+
+| Step | 内容 | 状态 |
+|------|------|:---:|
+| Step 1 | 核心数据模型（schema-contracts.md） | ✅ 已完成 |
+| Step 2 | 节点详细规格（node-spec-sheet.md） | ✅ 已完成(需同步N07b/N16b/Supervisor更新) |
+| Step 3 | LangGraph状态机完整流转设计 | 待调整 |
+| Step 4 | 质检评分体系（质量硬红线文档） | 待调整 |
+| Step 5 | 模型路由与成本控制规则引擎 | 待启动 |
+| Step 6 | RAG知识库架构（链路关联+向量检索） | 待启动 |
+| Step 7 | Prompt资产库设计（母版+适配器+版本管理） | 待启动 |
+| Step 8 | 项目集/发行需求管理schema + Supervisor规则 | 待启动 |
+| Step 9 | 基础设施规格（火山引擎全栈） | 待启动 |
+| Step 10 | K8s部署架构详细设计（VKE编排+服务通信） | 待启动 |
+| Step 11 | MVP验收标准与端到端测试用例 | 待启动 |
+| Step 12 | 审阅页面UI/UX + OpenClaw集成 | 待启动 |
+| Step 13 | 飞书Bot + Agent Gateway | 待启动 |
+| Step 14 | 进化系统详细设计（A/B框架+LoRA自动化） | 待启动 |
+| Step 15 | 测试剧本库建设 | 待启动 |

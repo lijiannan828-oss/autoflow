@@ -1,6 +1,11 @@
 {
   "permissions": {
     "allow": [
+      "Bash",
+      "Edit",
+      "Read",
+      "Write",
+      "WebFetch",
       "Bash(.venv-connectivity/bin/python3 -c \":*)",
       "Bash(wc -l /Users/mac/Documents/autoflow/backend/orchestrator/handlers/*.py)",
       "Bash(grep -n \"^def register\" /Users/mac/Documents/autoflow/backend/orchestrator/handlers/*.py)",

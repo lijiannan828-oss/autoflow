@@ -58,7 +58,10 @@ except ImportError:
 
 
 def build_pipeline_graph() -> Any:
-    """Construct the full 26-node pipeline as a LangGraph StateGraph.
+    """Construct the full 28-node pipeline as a LangGraph StateGraph.
+
+    v2.2 changes: N07b (voice samples, parallel with N07) and N16b
+    (tone/pacing adjustment, serial between N16 and N17) added.
 
     Architecture:
 
@@ -80,6 +83,10 @@ def build_pipeline_graph() -> Any:
             │               │               │
             └───────────────┴───────────────┘
                     (all workers → supervisor)
+
+    Parallel nodes: N07 and N07b both depend on N06 and both must
+    complete before N08.  Currently dispatched sequentially via the
+    supervisor (N07 → N07b → N08).
 
     Gate nodes (N08, N18, N21, N24) have two sub-nodes: ``gate_enter_*``
     creates ReviewTasks, then the graph pauses at ``gate_resume_*`` via
