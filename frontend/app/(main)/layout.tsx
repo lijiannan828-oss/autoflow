@@ -33,17 +33,29 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [showUserMenu, setShowUserMenu] = useState(false)
 
   useEffect(() => {
+    // TODO: Remove /agents preview bypass after testing
+    const isAgentsPreview = pathname.startsWith("/agents")
+    
     fetch("/api/auth/me")
       .then(r => r.json())
       .then(data => {
         if (data.error) {
-          router.replace(`/login?from=${encodeURIComponent(pathname)}`)
+          if (isAgentsPreview) {
+            // Allow unauthenticated preview for /agents
+            setUser({ id: "preview", name: "预览用户", role: "developer", home: "/agents" } as AuthUser)
+          } else {
+            router.replace(`/login?from=${encodeURIComponent(pathname)}`)
+          }
         } else {
           setUser(data)
         }
       })
       .catch(() => {
-        router.replace("/login")
+        if (isAgentsPreview) {
+          setUser({ id: "preview", name: "预览用户", role: "developer", home: "/agents" } as AuthUser)
+        } else {
+          router.replace("/login")
+        }
       })
       .finally(() => setLoading(false))
   }, [router, pathname])
