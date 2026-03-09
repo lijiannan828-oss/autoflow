@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv-connectivity/bin/python3 -c \":*)",
+      "Bash(wc -l /Users/mac/Documents/autoflow/backend/orchestrator/handlers/*.py)",
+      "Bash(grep -n \"^def register\" /Users/mac/Documents/autoflow/backend/orchestrator/handlers/*.py)",
+      "Bash(grep -n \"def register\" /Users/mac/Documents/autoflow/backend/orchestrator/handlers/*.py)",
+      "Bash(ls -la /Users/mac/Documents/autoflow/frontend/app/review/*/)",
+      "Read(//Users/mac/Documents/autoflow/**)",
+      "Bash(grep -E \"\\\\.\\(tsx?|jsx?\\)$\")",
+      "Bash(grep -n \"def handle_\\\\|def register\" /Users/mac/Documents/autoflow/backend/orchestrator/handlers/*.py)"
+    ],
+    "additionalDirectories": [
+      "/Users/mac/Documents/autoflow/frontend/app/api/orchestrator/review/tasks/[taskId]"
+    ]
+  }
+}

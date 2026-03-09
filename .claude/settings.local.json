@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m backend.orchestrator.graph.test_graph_build)",
+      "Bash(grep -E '\\\\.\\(md|yml|yaml|json|env\\)$')",
+      "Bash(pip list --path /Users/mac/Documents/autoflow/.venv-connectivity/lib/python3.14/site-packages)",
+      "Bash(/Users/mac/Documents/autoflow/.venv-connectivity/bin/pip list)",
+      "Bash(/Users/mac/Documents/autoflow/.venv-connectivity/bin/pip install fastapi uvicorn[standard])",
+      "Bash(.venv-connectivity/bin/python -c \"from backend.api.main import app; print\\(f''FastAPI app loaded: {len\\(app.routes\\)} routes''\\)\")",
+      "Bash(.venv-connectivity/bin/python -c \":*)",
+      "Bash(.venv-connectivity/bin/pip install langgraph celery[redis])",
+      "Bash(.venv-connectivity/bin/pip install langgraph-checkpoint-postgres)",
+      "Bash(wc -l /Users/mac/Documents/autoflow/migrations/*.sql)",
+      "Bash(ls -la /Users/mac/Documents/autoflow/frontend/lib/*mock-data.ts)",
+      "Bash(grep -E \"\\\\.py$|^d\")",
+      "WebSearch",
+      "WebFetch(domain:www.volcengine.com)",
+      "WebFetch(domain:zhuanlan.zhihu.com)",
+      "WebFetch(domain:www.foreignserver.com)",
+      "WebFetch(domain:www.idcbest.com)",
+      "WebFetch(domain:www.yunfuwuqiba.com)",
+      "WebFetch(domain:www.gogpu.cn)",
+      "WebFetch(domain:www.cnblogs.com)",
+      "WebFetch(domain:kie.ai)",
+      "WebFetch(domain:docs.kie.ai)",
+      "Bash(grep -n \"episode_versions.*status\\\\|ALTER TABLE.*episode_versions\" /Users/mac/Documents/autoflow/migrations/*.sql)",
+      "Bash(source .venv-connectivity/bin/activate)",
+      "Bash(python3 -c \":*)",
+      "Bash(npx tsc --noEmit lib/sprint-data.ts)",
+      "Bash(kill %1)"
+    ]
+  }
+}
