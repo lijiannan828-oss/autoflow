@@ -598,7 +598,7 @@ function TestWindowCard({
   return (
     <div
       className={cn(
-        "border rounded-lg bg-card/50 flex flex-col min-h-[400px]",
+        "border rounded-lg bg-card/50 flex flex-col h-[calc(100vh-7rem)]",
         isRunning && "border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.15)]",
         isCompleted && "border-emerald-500/30"
       )}
@@ -714,8 +714,36 @@ function TestWindowCard({
 
         {/* Models input section */}
         {win.isExpanded && (
-          <div className="border-b border-border/50">
-            <div className="p-3 overflow-y-auto max-h-[350px]">
+          <div className="border-b border-border/50 shrink-0">
+            {/* Add model button - fixed at top */}
+            {win.models.length < 4 && (
+              <div className="px-3 pt-3 pb-2 border-b border-border/30 relative z-10 bg-card/50">
+                <Select onValueChange={onAddModel} value="" disabled={isRunning}>
+                  <SelectTrigger className="w-full h-10 border-dashed bg-secondary/20">
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground w-full">
+                      <Plus className="w-4 h-4" />
+                      <span className="text-xs font-medium">添加模型对比 ({win.models.length}/4)</span>
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="z-50">
+                    {filteredModels.map((m) => {
+                      const Icon = getCategoryIcon(m.category)
+                      return (
+                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                          <div className="flex items-center gap-2">
+                            <Icon className="w-3 h-3" />
+                            {m.name}
+                          </div>
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {/* Model cards */}
+            <div className="p-3 overflow-y-auto max-h-[280px]">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {win.models.map((mc, idx) => (
                   <ModelInputCard
@@ -730,33 +758,6 @@ function TestWindowCard({
                   />
                 ))}
               </div>
-              
-              {/* Add model button - separate row */}
-              {win.models.length < 4 && (
-                <div className="mt-3">
-                  <Select onValueChange={onAddModel} value="" disabled={isRunning}>
-                    <SelectTrigger className="w-full h-12 border-dashed">
-                      <div className="flex items-center justify-center gap-2 text-muted-foreground w-full">
-                        <Plus className="w-4 h-4" />
-                        <span className="text-xs">添加模型对比 ({win.models.length}/4)</span>
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredModels.map((m) => {
-                        const Icon = getCategoryIcon(m.category)
-                        return (
-                          <SelectItem key={m.id} value={m.id} className="text-xs">
-                            <div className="flex items-center gap-2">
-                              <Icon className="w-3 h-3" />
-                              {m.name}
-                            </div>
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
             </div>
           </div>
         )}
