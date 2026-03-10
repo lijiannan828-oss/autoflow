@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
 import {
   Select,
   SelectContent,
@@ -41,28 +41,17 @@ import {
   Loader2,
   Check,
   AlertCircle,
-  Maximize2,
-  Minimize2,
   RotateCcw,
   Sparkles,
+  Trash2,
 } from "lucide-react"
 
 // ============ 类型定义 ============
 
-// 单个模型的测试配置
 interface ModelTestConfig {
   id: string
   modelId: string
   params: Record<string, unknown>
-}
-
-// 单个模型的测试结果
-interface ModelTestResult {
-  modelId: string
-  results: SingleResult[]
-  status: "idle" | "running" | "completed" | "error"
-  startTime?: number
-  endTime?: number
 }
 
 interface SingleResult {
@@ -75,13 +64,20 @@ interface SingleResult {
   seed?: number
 }
 
+interface ModelTestResult {
+  modelConfigId: string
+  results: SingleResult[]
+  status: "idle" | "running" | "completed" | "error"
+  startTime?: number
+  endTime?: number
+}
+
 interface TestWindow {
   id: string
-  models: ModelTestConfig[] // 最多 4 个模型
+  name: string
+  models: ModelTestConfig[]
   drawCount: number
-  modelResults: Record<string, ModelTestResult> // modelConfigId -> result
-  isExpanded: boolean
-  isMinimized: boolean
+  modelResults: Record<string, ModelTestResult>
   globalStatus: "idle" | "running" | "completed"
 }
 
@@ -139,11 +135,23 @@ function formatCost(cost: number): string {
   return `¥${cost.toFixed(3)}`
 }
 
+function generateMockTextOutput(): string {
+  const responses = [
+    "这是一段模拟的 LLM 输出文本。在实际应用中，这里会显示模型生成的内容。",
+    "根据您的输入，模型生成了以下回复：这是一个测试响应，用于验证接口的正确性。",
+    "模型已成功处理您的请求。输出内容已按照指定的参数生成。",
+  ]
+  return responses[Math.floor(Math.random() * responses.length)]
+}
+
 // ============ 主组件 ============
 
 export default function ModelTestPage() {
   const [windows, setWindows] = useState<TestWindow[]>([])
+  const [activeWindowId, setActiveWindowId] = useState<string | null>(null)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+
+  const activeWindow = windows.find(w => w.id === activeWindowId)
 
   // 添加新窗口
   const addWindow = useCallback((modelId?: string) => {
@@ -152,6 +160,7 @@ export default function ModelTestPage() {
 
     const newWindow: TestWindow = {
       id: generateId(),
+      name: `测试 ${windows.length + 1}`,
       models: [{
         id: generateId(),
         modelId: model.id,
@@ -159,130 +168,92 @@ export default function ModelTestPage() {
       }],
       drawCount: 1,
       modelResults: {},
-      isExpanded: true,
-      isMinimized: false,
       globalStatus: "idle",
     }
-    setWindows((prev) => [...prev, newWindow])
-  }, [])
-
-  // 复制窗口
-  const duplicateWindow = useCallback((windowId: string) => {
-    setWindows((prev) => {
-      const win = prev.find((w) => w.id === windowId)
-      if (!win) return prev
-      const newWindow: TestWindow = {
-        ...win,
-        id: generateId(),
-        models: win.models.map(m => ({ ...m, id: generateId(), params: { ...m.params } })),
-        modelResults: {},
-        globalStatus: "idle",
-      }
-      return [...prev, newWindow]
-    })
-  }, [])
+    setWindows(prev => [...prev, newWindow])
+    setActiveWindowId(newWindow.id)
+  }, [windows.length])
 
   // 删除窗口
   const removeWindow = useCallback((windowId: string) => {
-    setWindows((prev) => prev.filter((w) => w.id !== windowId))
-  }, [])
+    setWindows(prev => {
+      const newWindows = prev.filter(w => w.id !== windowId)
+      if (activeWindowId === windowId) {
+        setActiveWindowId(newWindows.length > 0 ? newWindows[0].id : null)
+      }
+      return newWindows
+    })
+  }, [activeWindowId])
 
   // 更新窗口
   const updateWindow = useCallback((windowId: string, updates: Partial<TestWindow>) => {
-    setWindows((prev) =>
-      prev.map((w) => (w.id === windowId ? { ...w, ...updates } : w))
-    )
+    setWindows(prev => prev.map(w => w.id === windowId ? { ...w, ...updates } : w))
   }, [])
 
-  // 添加模型到窗口
-  const addModelToWindow = useCallback((windowId: string, modelId: string) => {
+  // 添加模型
+  const addModel = useCallback((windowId: string, modelId: string) => {
     const model = getModelById(modelId)
     if (!model) return
-    
-    setWindows((prev) =>
-      prev.map((w) => {
-        if (w.id !== windowId) return w
-        if (w.models.length >= 4) return w // 最多 4 个
-        return {
-          ...w,
-          models: [...w.models, {
-            id: generateId(),
-            modelId: model.id,
-            params: getDefaultParams(model),
-          }],
-        }
-      })
-    )
+    setWindows(prev => prev.map(w => {
+      if (w.id !== windowId || w.models.length >= 4) return w
+      return {
+        ...w,
+        models: [...w.models, {
+          id: generateId(),
+          modelId: model.id,
+          params: getDefaultParams(model),
+        }],
+      }
+    }))
   }, [])
 
-  // 从窗口移除模型
-  const removeModelFromWindow = useCallback((windowId: string, modelConfigId: string) => {
-    setWindows((prev) =>
-      prev.map((w) => {
-        if (w.id !== windowId) return w
-        if (w.models.length <= 1) return w // 至少保留 1 个
-        const newResults = { ...w.modelResults }
-        delete newResults[modelConfigId]
-        return {
-          ...w,
-          models: w.models.filter(m => m.id !== modelConfigId),
-          modelResults: newResults,
-        }
-      })
-    )
-  }, [])
-
-  // 更新模型配置
-  const updateModelConfig = useCallback((windowId: string, modelConfigId: string, updates: Partial<ModelTestConfig>) => {
-    setWindows((prev) =>
-      prev.map((w) => {
-        if (w.id !== windowId) return w
-        return {
-          ...w,
-          models: w.models.map(m => m.id === modelConfigId ? { ...m, ...updates } : m),
-        }
-      })
-    )
+  // 移除模型
+  const removeModel = useCallback((windowId: string, configId: string) => {
+    setWindows(prev => prev.map(w => {
+      if (w.id !== windowId || w.models.length <= 1) return w
+      const newResults = { ...w.modelResults }
+      delete newResults[configId]
+      return {
+        ...w,
+        models: w.models.filter(m => m.id !== configId),
+        modelResults: newResults,
+      }
+    }))
   }, [])
 
   // 切换模型
-  const changeModel = useCallback((windowId: string, modelConfigId: string, newModelId: string) => {
+  const changeModel = useCallback((windowId: string, configId: string, newModelId: string) => {
     const model = getModelById(newModelId)
     if (!model) return
-    
-    setWindows((prev) =>
-      prev.map((w) => {
-        if (w.id !== windowId) return w
-        const newResults = { ...w.modelResults }
-        delete newResults[modelConfigId]
-        return {
-          ...w,
-          models: w.models.map(m => 
-            m.id === modelConfigId 
-              ? { ...m, modelId: newModelId, params: getDefaultParams(model) }
-              : m
-          ),
-          modelResults: newResults,
-        }
-      })
-    )
+    setWindows(prev => prev.map(w => {
+      if (w.id !== windowId) return w
+      const newResults = { ...w.modelResults }
+      delete newResults[configId]
+      return {
+        ...w,
+        models: w.models.map(m => 
+          m.id === configId 
+            ? { ...m, modelId: newModelId, params: getDefaultParams(model) }
+            : m
+        ),
+        modelResults: newResults,
+      }
+    }))
   }, [])
 
   // 更新参数
-  const updateParam = useCallback((windowId: string, modelConfigId: string, key: string, value: unknown) => {
-    setWindows((prev) =>
-      prev.map((w) => {
-        if (w.id !== windowId) return w
-        return {
-          ...w,
-          models: w.models.map(m => 
-            m.id === modelConfigId 
-              ? { ...m, params: { ...m.params, [key]: value } }
-              : m
-          ),
-        }
-      })
-    )
+  const updateParam = useCallback((windowId: string, configId: string, key: string, value: unknown) => {
+    setWindows(prev => prev.map(w => {
+      if (w.id !== windowId) return w
+      return {
+        ...w,
+        models: w.models.map(m => 
+          m.id === configId 
+            ? { ...m, params: { ...m.params, [key]: value } }
+            : m
+        ),
+      }
+    }))
   }, [])
 
   // 运行测试
@@ -290,11 +261,11 @@ export default function ModelTestPage() {
     const win = windows.find(w => w.id === windowId)
     if (!win) return
 
-    // 初始化所有模型的结果
+    // 初始化结果
     const initialResults: Record<string, ModelTestResult> = {}
     win.models.forEach(mc => {
       initialResults[mc.id] = {
-        modelId: mc.modelId,
+        modelConfigId: mc.id,
         status: "running",
         results: Array.from({ length: win.drawCount }).map((_, i) => ({
           index: i,
@@ -305,12 +276,10 @@ export default function ModelTestPage() {
     })
 
     setWindows(prev => prev.map(w => 
-      w.id === windowId 
-        ? { ...w, globalStatus: "running", modelResults: initialResults }
-        : w
+      w.id === windowId ? { ...w, globalStatus: "running", modelResults: initialResults } : w
     ))
 
-    // 为每个模型并行执行测试
+    // 并行执行每个模型
     win.models.forEach(mc => {
       const model = getModelById(mc.modelId)
       if (!model) return
@@ -318,25 +287,18 @@ export default function ModelTestPage() {
       let currentIndex = 0
       const runNext = () => {
         if (currentIndex >= win.drawCount) {
-          // 该模型完成
           setWindows(prev => prev.map(w => {
             if (w.id !== windowId) return w
             const newResults = { ...w.modelResults }
             if (newResults[mc.id]) {
               newResults[mc.id] = { ...newResults[mc.id], status: "completed", endTime: Date.now() }
             }
-            // 检查是否所有模型都完成
             const allCompleted = Object.values(newResults).every(r => r.status === "completed" || r.status === "error")
-            return { 
-              ...w, 
-              modelResults: newResults,
-              globalStatus: allCompleted ? "completed" : w.globalStatus,
-            }
+            return { ...w, modelResults: newResults, globalStatus: allCompleted ? "completed" : w.globalStatus }
           }))
           return
         }
 
-        // 开始当前项
         setWindows(prev => prev.map(w => {
           if (w.id !== windowId) return w
           const newResults = { ...w.modelResults }
@@ -348,14 +310,12 @@ export default function ModelTestPage() {
           return { ...w, modelResults: newResults }
         }))
 
-        // 模拟执行
         const duration = (model.estimatedDuration || 5) * 1000 * (0.5 + Math.random())
         const baseCost = model.costPerCall || 0.1
         const cost = baseCost * (0.8 + Math.random() * 0.4)
 
         setTimeout(() => {
           const isSuccess = Math.random() > 0.05
-
           setWindows(prev => prev.map(w => {
             if (w.id !== windowId) return w
             const newResults = { ...w.modelResults }
@@ -367,23 +327,17 @@ export default function ModelTestPage() {
                 duration,
                 cost: isSuccess ? cost : 0,
                 seed: Math.floor(Math.random() * 4294967295),
-                output: isSuccess
-                  ? model.outputType === "text"
-                    ? generateMockTextOutput(model)
-                    : generateMockMediaOutput(model)
-                  : undefined,
+                output: isSuccess ? generateMockTextOutput() : undefined,
                 error: isSuccess ? undefined : "API 调用失败",
               }
               newResults[mc.id] = { ...newResults[mc.id], results }
             }
             return { ...w, modelResults: newResults }
           }))
-
           currentIndex++
           runNext()
         }, Math.min(duration, 2000))
       }
-
       runNext()
     })
   }, [windows])
@@ -409,18 +363,16 @@ export default function ModelTestPage() {
     }))
   }, [])
 
-  // 重置窗口
-  const resetWindow = useCallback((windowId: string) => {
+  // 重置
+  const resetTest = useCallback((windowId: string) => {
     setWindows(prev => prev.map(w =>
-      w.id === windowId
-        ? { ...w, globalStatus: "idle", modelResults: {} }
-        : w
+      w.id === windowId ? { ...w, globalStatus: "idle", modelResults: {} } : w
     ))
   }, [])
 
   // 过滤模型
   const filteredModels = selectedCategory
-    ? ALL_MODELS.filter((m) => m.category === selectedCategory)
+    ? ALL_MODELS.filter(m => m.category === selectedCategory)
     : ALL_MODELS
 
   return (
@@ -429,73 +381,81 @@ export default function ModelTestPage() {
       <header className="h-12 border-b border-border bg-card/50 flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
           <h1 className="text-sm font-medium">模型接口测试</h1>
-          <Badge variant="outline" className="text-[10px]">
-            {windows.length} 个窗口
-          </Badge>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* 分类筛选 */}
-          <div className="flex items-center gap-1 bg-secondary/30 rounded-lg p-1">
-            <Button
-              variant={selectedCategory === null ? "secondary" : "ghost"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setSelectedCategory(null)}
-            >
-              全部
-            </Button>
-            {MODEL_CATEGORIES.map((cat) => {
-              const Icon = getCategoryIcon(cat.id)
-              return (
-                <Button
-                  key={cat.id}
-                  variant={selectedCategory === cat.id ? "secondary" : "ghost"}
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={() => setSelectedCategory(cat.id)}
+          
+          {/* Window tabs */}
+          <div className="flex items-center gap-1 ml-4">
+            {windows.map(win => (
+              <button
+                key={win.id}
+                onClick={() => setActiveWindowId(win.id)}
+                className={cn(
+                  "h-7 px-3 rounded text-xs flex items-center gap-2 transition-colors",
+                  activeWindowId === win.id
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary/50 hover:bg-secondary text-foreground"
+                )}
+              >
+                {win.name}
+                {win.globalStatus === "running" && (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                )}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    removeWindow(win.id)
+                  }}
+                  className="ml-1 hover:text-destructive"
                 >
-                  <Icon className="w-3.5 h-3.5 mr-1" />
-                  {cat.label}
-                </Button>
-              )
-            })}
+                  <X className="w-3 h-3" />
+                </button>
+              </button>
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => addWindow()}
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
           </div>
-          <div className="w-px h-6 bg-border mx-2" />
-          {/* 快速添加 */}
-          <Select onValueChange={(v) => addWindow(v)} value="">
-            <SelectTrigger className="w-[200px] h-8 text-xs">
-              <SelectValue placeholder="选择模型添加窗口..." />
-            </SelectTrigger>
-            <SelectContent>
-              {filteredModels.map((model) => {
-                const Icon = getCategoryIcon(model.category)
-                return (
-                  <SelectItem key={model.id} value={model.id} className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <Icon className="w-3.5 h-3.5" />
-                      {model.name}
-                    </div>
-                  </SelectItem>
-                )
-              })}
-            </SelectContent>
-          </Select>
-          <Button size="sm" className="h-8" onClick={() => addWindow()}>
-            <Plus className="w-4 h-4 mr-1" />
-            新建窗口
+        </div>
+
+        {/* Category filter */}
+        <div className="flex items-center gap-1 bg-secondary/30 rounded-lg p-1">
+          <Button
+            variant={selectedCategory === null ? "secondary" : "ghost"}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setSelectedCategory(null)}
+          >
+            全部
           </Button>
+          {MODEL_CATEGORIES.map(cat => {
+            const Icon = getCategoryIcon(cat.id)
+            return (
+              <Button
+                key={cat.id}
+                variant={selectedCategory === cat.id ? "secondary" : "ghost"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setSelectedCategory(cat.id)}
+              >
+                <Icon className="w-3.5 h-3.5 mr-1" />
+                {cat.label}
+              </Button>
+            )
+          })}
         </div>
       </header>
 
       {/* Main content */}
-      <div className="flex-1 overflow-auto p-4">
-        {windows.length === 0 ? (
+      <div className="flex-1 overflow-hidden">
+        {!activeWindow ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <Sparkles className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
-              <p className="text-sm text-muted-foreground mb-4">
-                点击上方按钮添加测试窗口
-              </p>
+              <p className="text-sm text-muted-foreground mb-4">点击上方 + 按钮添加测试窗口</p>
               <Button onClick={() => addWindow()}>
                 <Plus className="w-4 h-4 mr-2" />
                 添加第一个窗口
@@ -503,296 +463,116 @@ export default function ModelTestPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            {windows.map((win) => (
-              <TestWindowCard
-                key={win.id}
-                window={win}
-                filteredModels={filteredModels}
-                onUpdate={(updates) => updateWindow(win.id, updates)}
-                onAddModel={(modelId) => addModelToWindow(win.id, modelId)}
-                onRemoveModel={(configId) => removeModelFromWindow(win.id, configId)}
-                onChangeModel={(configId, modelId) => changeModel(win.id, configId, modelId)}
-                onUpdateParam={(configId, key, value) => updateParam(win.id, configId, key, value)}
-                onRun={() => runTest(win.id)}
-                onStop={() => stopTest(win.id)}
-                onReset={() => resetWindow(win.id)}
-                onDuplicate={() => duplicateWindow(win.id)}
-                onRemove={() => removeWindow(win.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+          <div className="h-full flex flex-col">
+            {/* Control bar */}
+            <div className="h-12 px-4 border-b border-border/50 flex items-center justify-between shrink-0 bg-card/30">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground">抽卡次数</Label>
+                  <Slider
+                    value={[activeWindow.drawCount]}
+                    onValueChange={([v]) => updateWindow(activeWindow.id, { drawCount: v })}
+                    min={1}
+                    max={10}
+                    step={1}
+                    className="w-32"
+                    disabled={activeWindow.globalStatus === "running"}
+                  />
+                  <span className="text-xs font-mono w-6">{activeWindow.drawCount}</span>
+                </div>
+                
+                <div className="w-px h-6 bg-border" />
+                
+                <Badge variant="outline" className="text-[10px]">
+                  {activeWindow.models.length}/4 模型
+                </Badge>
+              </div>
 
-// ============ 测试窗口卡片 ============
+              <div className="flex items-center gap-2">
+                {activeWindow.globalStatus === "running" ? (
+                  <Button variant="destructive" size="sm" onClick={() => stopTest(activeWindow.id)}>
+                    <Square className="w-3.5 h-3.5 mr-1" />
+                    停止
+                  </Button>
+                ) : (
+                  <>
+                    {activeWindow.globalStatus === "completed" && (
+                      <Button variant="outline" size="sm" onClick={() => resetTest(activeWindow.id)}>
+                        <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                        重置
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={() => runTest(activeWindow.id)}>
+                      <Play className="w-3.5 h-3.5 mr-1" />
+                      运行全部
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
 
-interface TestWindowCardProps {
-  window: TestWindow
-  filteredModels: ModelSpec[]
-  onUpdate: (updates: Partial<TestWindow>) => void
-  onAddModel: (modelId: string) => void
-  onRemoveModel: (configId: string) => void
-  onChangeModel: (configId: string, modelId: string) => void
-  onUpdateParam: (configId: string, key: string, value: unknown) => void
-  onRun: () => void
-  onStop: () => void
-  onReset: () => void
-  onDuplicate: () => void
-  onRemove: () => void
-}
+            {/* Models list - scrollable */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {activeWindow.models.map((mc, idx) => (
+                <ModelTestRow
+                  key={mc.id}
+                  config={mc}
+                  index={idx}
+                  result={activeWindow.modelResults[mc.id]}
+                  drawCount={activeWindow.drawCount}
+                  isRunning={activeWindow.globalStatus === "running"}
+                  canRemove={activeWindow.models.length > 1}
+                  onRemove={() => removeModel(activeWindow.id, mc.id)}
+                  onChangeModel={(modelId) => changeModel(activeWindow.id, mc.id, modelId)}
+                  onUpdateParam={(key, value) => updateParam(activeWindow.id, mc.id, key, value)}
+                />
+              ))}
 
-function TestWindowCard({
-  window: win,
-  filteredModels,
-  onUpdate,
-  onAddModel,
-  onRemoveModel,
-  onChangeModel,
-  onUpdateParam,
-  onRun,
-  onStop,
-  onReset,
-  onDuplicate,
-  onRemove,
-}: TestWindowCardProps) {
-  const isRunning = win.globalStatus === "running"
-  const isCompleted = win.globalStatus === "completed"
-
-  // 统计
-  const totalDuration = Object.values(win.modelResults).reduce((sum, mr) => 
-    sum + mr.results.reduce((s, r) => s + (r.duration || 0), 0), 0)
-  const totalCost = Object.values(win.modelResults).reduce((sum, mr) => 
-    sum + mr.results.reduce((s, r) => s + (r.cost || 0), 0), 0)
-  const completedCount = Object.values(win.modelResults).reduce((sum, mr) => 
-    sum + mr.results.filter(r => r.status === "completed").length, 0)
-  const totalCount = win.models.length * win.drawCount
-
-  if (win.isMinimized) {
-    return (
-      <div className="border border-border rounded-lg bg-card/50 p-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{win.models.length} 个模型对比</span>
-          {isRunning && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
-          {isCompleted && (
-            <Badge variant="outline" className="text-[10px]">
-              {completedCount}/{totalCount}
-            </Badge>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => onUpdate({ isMinimized: false })}
-        >
-          <Maximize2 className="w-3.5 h-3.5" />
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <div
-      className={cn(
-        "border rounded-lg bg-card/50 flex flex-col h-[calc(100vh-7rem)]",
-        isRunning && "border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.15)]",
-        isCompleted && "border-emerald-500/30"
-      )}
-    >
-      {/* Window header */}
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border/50 shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium">模型对比测试</span>
-          <Badge variant="outline" className="text-[10px]">
-            {win.models.length}/4 模型
-          </Badge>
-        </div>
-        <div className="flex items-center gap-1">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onDuplicate}>
-                  <Copy className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>复制窗口</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => onUpdate({ isMinimized: true })}
-          >
-            <Minimize2 className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-destructive hover:text-destructive"
-            onClick={onRemove}
-          >
-            <X className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Draw count & Actions */}
-      <div className="px-3 py-2 border-b border-border/50 flex items-center gap-4">
-        <div className="flex items-center gap-3 flex-1">
-          <Label className="text-[10px] text-muted-foreground shrink-0">抽卡次数</Label>
-          <Slider
-            value={[win.drawCount]}
-            onValueChange={([v]) => onUpdate({ drawCount: v })}
-            min={1}
-            max={10}
-            step={1}
-            disabled={isRunning}
-            className="flex-1 max-w-[150px]"
-          />
-          <span className="text-xs font-mono w-6 text-center">{win.drawCount}</span>
-        </div>
-
-        {isCompleted && (
-          <div className="flex items-center gap-3 text-[10px]">
-            <span className="flex items-center gap-1 text-muted-foreground">
-              <Clock className="w-3 h-3" />
-              {formatDuration(totalDuration)}
-            </span>
-            <span className="flex items-center gap-1 text-amber-400">
-              <DollarSign className="w-3 h-3" />
-              {formatCost(totalCost)}
-            </span>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2">
-          {isRunning ? (
-            <Button variant="destructive" size="sm" className="h-7" onClick={onStop}>
-              <Square className="w-3 h-3 mr-1" />
-              停止
-            </Button>
-          ) : (
-            <>
-              <Button size="sm" className="h-7" onClick={onRun}>
-                <Play className="w-3 h-3 mr-1" />
-                运行 ({win.models.length}x{win.drawCount})
-              </Button>
-              {isCompleted && (
-                <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={onReset}>
-                  <RotateCcw className="w-3 h-3" />
-                </Button>
+              {/* Add model button */}
+              {activeWindow.models.length < 4 && (
+                <div className="border-2 border-dashed border-border/50 rounded-lg p-6 hover:border-primary/50 transition-colors">
+                  <Select
+                    onValueChange={(v) => addModel(activeWindow.id, v)}
+                    value=""
+                    disabled={activeWindow.globalStatus === "running"}
+                  >
+                    <SelectTrigger className="w-full h-12 border-0 bg-transparent">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground w-full">
+                        <Plus className="w-5 h-5" />
+                        <span className="text-sm">添加对比模型 ({activeWindow.models.length}/4)</span>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredModels.map(m => {
+                        const Icon = getCategoryIcon(m.category)
+                        return (
+                          <SelectItem key={m.id} value={m.id}>
+                            <div className="flex items-center gap-2">
+                              <Icon className="w-4 h-4" />
+                              {m.name}
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Models grid - Input area */}
-      <div className="flex-1 flex flex-col min-h-0">
-        {/* Expand/collapse toggle */}
-        <button
-          className="h-7 flex items-center justify-center text-[10px] text-muted-foreground hover:bg-secondary/30 transition-colors border-b border-border/50"
-          onClick={() => onUpdate({ isExpanded: !win.isExpanded })}
-        >
-          {win.isExpanded ? (
-            <>
-              <ChevronDown className="w-3 h-3 mr-1" />
-              收起输入参数
-            </>
-          ) : (
-            <>
-              <ChevronRight className="w-3 h-3 mr-1" />
-              展开输入参数
-            </>
-          )}
-        </button>
-
-        {/* Models input section */}
-        {win.isExpanded && (
-          <div className="border-b border-border/50 shrink-0">
-            {/* Add model button - fixed at top */}
-            {win.models.length < 4 && (
-              <div className="px-3 pt-3 pb-2 border-b border-border/30 relative z-10 bg-card/50">
-                <Select onValueChange={onAddModel} value="" disabled={isRunning}>
-                  <SelectTrigger className="w-full h-10 border-dashed bg-secondary/20">
-                    <div className="flex items-center justify-center gap-2 text-muted-foreground w-full">
-                      <Plus className="w-4 h-4" />
-                      <span className="text-xs font-medium">添加模型对比 ({win.models.length}/4)</span>
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent className="z-50">
-                    {filteredModels.map((m) => {
-                      const Icon = getCategoryIcon(m.category)
-                      return (
-                        <SelectItem key={m.id} value={m.id} className="text-xs">
-                          <div className="flex items-center gap-2">
-                            <Icon className="w-3 h-3" />
-                            {m.name}
-                          </div>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            {/* Model cards */}
-            <div className="p-3 overflow-y-auto max-h-[280px]">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {win.models.map((mc, idx) => (
-                  <ModelInputCard
-                    key={mc.id}
-                    config={mc}
-                    index={idx}
-                    isRunning={isRunning}
-                    onRemove={() => onRemoveModel(mc.id)}
-                    onChangeModel={(modelId) => onChangeModel(mc.id, modelId)}
-                    onUpdateParam={(key, value) => onUpdateParam(mc.id, key, value)}
-                    canRemove={win.models.length > 1}
-                  />
-                ))}
-              </div>
             </div>
           </div>
         )}
-
-        {/* Output section */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {win.models.map((mc) => {
-                const model = getModelById(mc.modelId)
-                if (!model) return null
-                const result = win.modelResults[mc.id]
-
-                return (
-                  <ModelOutputCard
-                    key={mc.id}
-                    model={model}
-                    result={result}
-                    drawCount={win.drawCount}
-                  />
-                )
-              })}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )
 }
 
-// ============ 模型输入卡片 ============
+// ============ 模型测试行 - 左参数右输出 ============
 
-interface ModelInputCardProps {
+interface ModelTestRowProps {
   config: ModelTestConfig
   index: number
+  result?: ModelTestResult
+  drawCount: number
   isRunning: boolean
   canRemove: boolean
   onRemove: () => void
@@ -800,289 +580,250 @@ interface ModelInputCardProps {
   onUpdateParam: (key: string, value: unknown) => void
 }
 
-function ModelInputCard({
+function ModelTestRow({
   config,
   index,
+  result,
+  drawCount,
   isRunning,
   canRemove,
   onRemove,
   onChangeModel,
   onUpdateParam,
-}: ModelInputCardProps) {
+}: ModelTestRowProps) {
   const [showAllParams, setShowAllParams] = useState(false)
-  const model = getModelById(config.modelId)
-  
-  if (!model) return null
-  
-  const CategoryIcon = getCategoryIcon(model.category)
-  const visibleParams = showAllParams ? model.params : model.params.slice(0, 3)
-  const hiddenCount = model.params.length - 3
-
-  return (
-    <div className="border border-border/50 rounded-lg p-3 bg-secondary/10">
-      {/* Model header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Badge className={cn("text-[9px]", getCategoryColor(model.category))}>
-            <CategoryIcon className="w-2.5 h-2.5 mr-0.5" />
-            {index + 1}
-          </Badge>
-        </div>
-        {canRemove && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5"
-            onClick={onRemove}
-            disabled={isRunning}
-          >
-            <X className="w-3 h-3" />
-          </Button>
-        )}
-      </div>
-
-      {/* Model selector */}
-      <Select 
-        value={config.modelId} 
-        onValueChange={onChangeModel} 
-        disabled={isRunning}
-      >
-        <SelectTrigger className="h-7 text-xs mb-2">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {ALL_MODELS.map((m) => {
-            const Icon = getCategoryIcon(m.category)
-            return (
-              <SelectItem key={m.id} value={m.id} className="text-xs">
-                <div className="flex items-center gap-2">
-                  <Icon className="w-3 h-3" />
-                  {m.name}
-                </div>
-              </SelectItem>
-            )
-          })}
-        </SelectContent>
-      </Select>
-
-      {/* Params */}
-      <div className="space-y-2">
-        {visibleParams.map((param) => (
-          <ParamInput
-            key={param.key}
-            param={param}
-            value={config.params[param.key]}
-            onChange={(v) => onUpdateParam(param.key, v)}
-            disabled={isRunning}
-            compact
-          />
-        ))}
-        
-        {/* Show more/less button */}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            className="w-full text-[10px] text-primary hover:text-primary/80 flex items-center justify-center gap-1 py-1 hover:bg-primary/5 rounded transition-colors"
-            onClick={() => setShowAllParams(!showAllParams)}
-          >
-            {showAllParams ? (
-              <>
-                <ChevronDown className="w-3 h-3" />
-                收起参数
-              </>
-            ) : (
-              <>
-                <ChevronRight className="w-3 h-3" />
-                展开更多参数 (+{hiddenCount})
-              </>
-            )}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ============ 模型输出卡片 ============
-
-interface ModelOutputCardProps {
-  model: ModelSpec
-  result?: ModelTestResult
-  drawCount: number
-}
-
-function ModelOutputCard({ model, result, drawCount }: ModelOutputCardProps) {
   const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null)
+  
+  const model = getModelById(config.modelId)
+  if (!model) return null
+
   const CategoryIcon = getCategoryIcon(model.category)
   const results = result?.results || []
   const completedResults = results.filter(r => r.status === "completed")
   const totalDuration = results.reduce((sum, r) => sum + (r.duration || 0), 0)
   const totalCost = results.reduce((sum, r) => sum + (r.cost || 0), 0)
-  const avgDuration = completedResults.length > 0 ? totalDuration / completedResults.length : 0
-  const avgCost = completedResults.length > 0 ? totalCost / completedResults.length : 0
-
   const selectedResult = selectedResultIndex !== null ? results[selectedResultIndex] : null
+
+  const visibleParams = showAllParams ? model.params : model.params.slice(0, 4)
+  const hiddenCount = model.params.length - 4
+
   const isMediaOutput = model.outputType === "image" || model.outputType === "video"
 
   return (
-    <div className="border border-border/50 rounded-lg bg-secondary/5 flex flex-col">
+    <div className={cn(
+      "border rounded-lg bg-card/50 overflow-hidden",
+      result?.status === "running" && "border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.1)]"
+    )}>
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border/30">
-        <div className="flex items-center gap-2">
-          <Badge className={cn("text-[9px]", getCategoryColor(model.category))}>
-            <CategoryIcon className="w-2.5 h-2.5 mr-0.5" />
-            {model.category.toUpperCase()}
+      <div className="h-10 px-4 flex items-center justify-between border-b border-border/50 bg-secondary/20">
+        <div className="flex items-center gap-3">
+          <Badge className={cn("text-[10px]", getCategoryColor(model.category))}>
+            <CategoryIcon className="w-3 h-3 mr-1" />
+            {index + 1}
           </Badge>
-          <span className="text-[10px] font-medium truncate max-w-[120px]">{model.name}</span>
+          <Select value={config.modelId} onValueChange={onChangeModel} disabled={isRunning}>
+            <SelectTrigger className="h-7 w-[200px] text-xs border-0 bg-transparent">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ALL_MODELS.map(m => {
+                const Icon = getCategoryIcon(m.category)
+                return (
+                  <SelectItem key={m.id} value={m.id}>
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-3.5 h-3.5" />
+                      {m.name}
+                    </div>
+                  </SelectItem>
+                )
+              })}
+            </SelectContent>
+          </Select>
+          {result?.status === "running" && (
+            <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+          )}
         </div>
-        {result && result.status === "running" && (
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+        
+        {canRemove && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+            onClick={onRemove}
+            disabled={isRunning}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
         )}
       </div>
 
-      {/* Output preview area */}
-      <div className="p-3">
-        {results.length > 0 ? (
-          <>
-            {/* Media preview or text output */}
-            {isMediaOutput ? (
-              <div className="mb-3">
-                <div className={cn(
-                  "relative rounded-lg overflow-hidden bg-black/50 flex items-center justify-center",
-                  model.outputType === "image" ? "aspect-square" : "aspect-video",
-                  "min-h-[120px]"
-                )}>
-                  {selectedResult?.status === "completed" ? (
+      {/* Content - left params, right output */}
+      <div className="flex min-h-[300px]">
+        {/* Left - Parameters */}
+        <div className="w-1/2 border-r border-border/50 p-4">
+          <h4 className="text-xs font-medium text-muted-foreground mb-3">参数配置</h4>
+          <div className="space-y-3">
+            {visibleParams.map(param => (
+              <ParamInput
+                key={param.key}
+                param={param}
+                value={config.params[param.key]}
+                onChange={(v) => onUpdateParam(param.key, v)}
+                disabled={isRunning}
+              />
+            ))}
+            
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                className="w-full text-xs text-primary hover:text-primary/80 flex items-center justify-center gap-1 py-2 hover:bg-primary/5 rounded transition-colors border border-dashed border-primary/30"
+                onClick={() => setShowAllParams(!showAllParams)}
+              >
+                {showAllParams ? (
+                  <>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    收起参数
+                  </>
+                ) : (
+                  <>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                    展开更多参数 (+{hiddenCount})
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Right - Output */}
+        <div className="w-1/2 p-4 flex flex-col">
+          <h4 className="text-xs font-medium text-muted-foreground mb-3">输出结果</h4>
+          
+          {results.length > 0 ? (
+            <div className="flex-1 flex flex-col">
+              {/* Output preview */}
+              <div className={cn(
+                "flex-1 rounded-lg border border-border/50 bg-black/20 flex items-center justify-center mb-3 min-h-[150px]",
+                isMediaOutput && "aspect-video"
+              )}>
+                {selectedResult?.status === "completed" ? (
+                  isMediaOutput ? (
                     <div className="text-center">
                       {model.outputType === "image" ? (
                         <>
-                          <Image className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
-                          <p className="text-[10px] text-muted-foreground">
-                            生成图片 #{(selectedResultIndex ?? 0) + 1}
-                          </p>
-                          <p className="text-[9px] text-muted-foreground/60">
-                            1024 x 1024 PNG
-                          </p>
+                          <Image className="w-10 h-10 text-zinc-500 mx-auto mb-2" />
+                          <p className="text-xs text-muted-foreground">生成图片 #{(selectedResultIndex ?? 0) + 1}</p>
+                          <p className="text-[10px] text-muted-foreground/60">1024 x 1024</p>
                         </>
                       ) : (
                         <>
-                          <Video className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
-                          <p className="text-[10px] text-muted-foreground">
-                            生成视频 #{(selectedResultIndex ?? 0) + 1}
-                          </p>
-                          <p className="text-[9px] text-muted-foreground/60">
-                            832 x 480 @ 16fps
-                          </p>
+                          <Video className="w-10 h-10 text-zinc-500 mx-auto mb-2" />
+                          <p className="text-xs text-muted-foreground">生成视频 #{(selectedResultIndex ?? 0) + 1}</p>
+                          <p className="text-[10px] text-muted-foreground/60">832 x 480</p>
                         </>
                       )}
                     </div>
-                  ) : selectedResult?.status === "running" ? (
-                    <div className="text-center">
-                      <Loader2 className="w-6 h-6 animate-spin text-blue-400 mx-auto mb-2" />
-                      <p className="text-[10px] text-muted-foreground">生成中...</p>
-                    </div>
-                  ) : selectedResult?.status === "error" ? (
-                    <div className="text-center">
-                      <AlertCircle className="w-6 h-6 text-red-400 mx-auto mb-2" />
-                      <p className="text-[10px] text-red-400">{selectedResult.error}</p>
-                    </div>
                   ) : (
-                    <div className="text-center">
-                      <Sparkles className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
-                      <p className="text-[10px] text-muted-foreground">点击下方选择查看</p>
+                    <div className="p-4 text-xs text-foreground/80 leading-relaxed overflow-y-auto max-h-full w-full">
+                      {typeof selectedResult.output === "string" 
+                        ? selectedResult.output 
+                        : JSON.stringify(selectedResult.output, null, 2)
+                      }
                     </div>
-                  )}
-                </div>
+                  )
+                ) : selectedResult?.status === "running" ? (
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-400 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">生成中...</p>
+                  </div>
+                ) : selectedResult?.status === "error" ? (
+                  <div className="text-center">
+                    <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                    <p className="text-xs text-red-400">{selectedResult.error}</p>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <Sparkles className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                    <p className="text-xs text-muted-foreground">点击下方选择查看结果</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              // Text output
-              selectedResult?.status === "completed" && selectedResult.output && (
-                <div className="mb-3 p-2 bg-secondary/30 rounded text-[10px] text-foreground/80 max-h-[80px] overflow-y-auto font-mono">
-                  {typeof selectedResult.output === "string" 
-                    ? selectedResult.output 
-                    : JSON.stringify(selectedResult.output, null, 2)
-                  }
+
+              {/* Results grid */}
+              <div className={cn(
+                "grid gap-2 mb-3",
+                drawCount <= 5 ? "grid-cols-5" : "grid-cols-10"
+              )}>
+                {results.map((r, idx) => (
+                  <TooltipProvider key={idx}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedResultIndex(idx)}
+                          className={cn(
+                            "h-10 rounded flex items-center justify-center text-xs transition-all border",
+                            r.status === "pending" && "bg-secondary/30 text-muted-foreground border-transparent",
+                            r.status === "running" && "bg-blue-500/20 text-blue-400 border-blue-500/30 animate-pulse",
+                            r.status === "completed" && "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
+                            r.status === "error" && "bg-red-500/10 text-red-400 border-red-500/30",
+                            selectedResultIndex === idx && "ring-2 ring-primary"
+                          )}
+                        >
+                          {r.status === "pending" && `#${idx + 1}`}
+                          {r.status === "running" && <Loader2 className="w-4 h-4 animate-spin" />}
+                          {r.status === "completed" && <Check className="w-4 h-4" />}
+                          {r.status === "error" && <AlertCircle className="w-4 h-4" />}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="text-xs space-y-1">
+                          <p>#{idx + 1}</p>
+                          {r.duration != null && <p>耗时: {formatDuration(r.duration)}</p>}
+                          {r.cost != null && <p>成本: {formatCost(r.cost)}</p>}
+                          {r.seed != null && <p>Seed: {r.seed}</p>}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
+              </div>
+
+              {/* Stats */}
+              {completedResults.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 p-3 bg-secondary/20 rounded-lg text-[10px]">
+                  <div>
+                    <p className="text-muted-foreground">完成</p>
+                    <p className="font-medium">{completedResults.length}/{results.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">总耗时</p>
+                    <p className="font-medium">{formatDuration(totalDuration)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">总成本</p>
+                    <p className="font-medium text-amber-400">{formatCost(totalCost)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">平均</p>
+                    <p className="font-medium">{formatDuration(totalDuration / completedResults.length)}</p>
+                  </div>
                 </div>
-              )
-            )}
-
-            {/* Results grid - selectable */}
+              )}
+            </div>
+          ) : (
             <div className={cn(
-              "grid gap-1.5",
-              drawCount <= 5 ? "grid-cols-5" : "grid-cols-5 sm:grid-cols-10"
+              "flex-1 flex items-center justify-center border border-dashed border-border/50 rounded-lg",
+              isMediaOutput && "aspect-video"
             )}>
-              {results.map((r, idx) => (
-                <TooltipProvider key={idx}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedResultIndex(idx)}
-                        className={cn(
-                          "h-8 rounded flex items-center justify-center text-[9px] transition-all border",
-                          r.status === "pending" && "bg-secondary/30 text-muted-foreground border-transparent",
-                          r.status === "running" && "bg-blue-500/20 text-blue-400 border-blue-500/30 animate-pulse",
-                          r.status === "completed" && "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
-                          r.status === "error" && "bg-red-500/10 text-red-400 border-red-500/30",
-                          selectedResultIndex === idx && "ring-2 ring-primary ring-offset-1 ring-offset-background"
-                        )}
-                      >
-                        {r.status === "pending" && <span>#{idx + 1}</span>}
-                        {r.status === "running" && <Loader2 className="w-3 h-3 animate-spin" />}
-                        {r.status === "completed" && <Check className="w-3 h-3" />}
-                        {r.status === "error" && <AlertCircle className="w-3 h-3" />}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[200px]">
-                      <div className="text-[10px] space-y-1">
-                        <p className="font-medium">#{idx + 1} - {r.status === "completed" ? "完成" : r.status === "running" ? "运行中" : r.status === "error" ? "失败" : "待执行"}</p>
-                        {r.duration != null && <p>耗时: {formatDuration(r.duration)}</p>}
-                        {r.cost != null && <p>成本: {formatCost(r.cost)}</p>}
-                        {r.seed != null && <p>Seed: {r.seed}</p>}
-                        {r.error && <p className="text-red-400">{r.error}</p>}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ))}
+              <div className="text-center">
+                <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">点击运行查看输出</p>
+              </div>
             </div>
-          </>
-        ) : (
-          <div className={cn(
-            "flex items-center justify-center text-[10px] text-muted-foreground border border-dashed border-border/50 rounded",
-            isMediaOutput ? "aspect-video min-h-[100px]" : "h-20"
-          )}>
-            <div className="text-center">
-              <Sparkles className="w-5 h-5 text-muted-foreground/50 mx-auto mb-1" />
-              点击运行查看输出
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Stats footer */}
-      {result && (result.status === "completed" || completedResults.length > 0) && (
-        <div className="px-3 py-2 border-t border-border/30 bg-secondary/20">
-          <div className="grid grid-cols-4 gap-2 text-[9px]">
-            <div>
-              <p className="text-muted-foreground">完成</p>
-              <p className="font-medium text-foreground">{completedResults.length}/{results.length}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">总耗时</p>
-              <p className="font-medium text-foreground">{formatDuration(totalDuration)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">总成本</p>
-              <p className="font-medium text-amber-400">{formatCost(totalCost)}</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">平均</p>
-              <p className="font-medium text-foreground">{formatDuration(avgDuration)}</p>
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -1094,64 +835,58 @@ interface ParamInputProps {
   value: unknown
   onChange: (value: unknown) => void
   disabled?: boolean
-  compact?: boolean
 }
 
-function ParamInput({ param, value, onChange, disabled, compact }: ParamInputProps) {
+function ParamInput({ param, value, onChange, disabled }: ParamInputProps) {
   return (
-    <div className={cn("space-y-1", compact && "space-y-0.5")}>
+    <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label className={cn("text-muted-foreground", compact ? "text-[9px]" : "text-[10px]")}>
-          {param.label}
-          {param.required && <span className="text-red-400 ml-0.5">*</span>}
-        </Label>
+        <Label className="text-xs">{param.label}</Label>
+        {param.required && <span className="text-[9px] text-red-400">必填</span>}
       </div>
-
-      {param.type === "string" && (
+      
+      {param.type === "text" && (
         <Input
-          value={(value as string) || ""}
+          value={String(value || "")}
           onChange={(e) => onChange(e.target.value)}
           placeholder={param.placeholder}
+          className="h-8 text-xs"
           disabled={disabled}
-          className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs")}
         />
       )}
-
+      
       {param.type === "textarea" && (
         <Textarea
-          value={(value as string) || ""}
+          value={String(value || "")}
           onChange={(e) => onChange(e.target.value)}
           placeholder={param.placeholder}
+          className="text-xs min-h-[80px] resize-none"
           disabled={disabled}
-          className={cn(compact ? "text-[10px] min-h-[40px]" : "text-xs min-h-[60px]", "resize-none")}
-          rows={compact ? 2 : 3}
         />
       )}
-
+      
       {param.type === "number" && (
-        <Input
-          type="number"
-          value={value as number}
-          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-          min={param.min}
-          max={param.max}
-          step={param.step}
-          disabled={disabled}
-          className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs")}
-        />
+        <div className="flex items-center gap-2">
+          <Slider
+            value={[Number(value) || param.min || 0]}
+            onValueChange={([v]) => onChange(v)}
+            min={param.min}
+            max={param.max}
+            step={param.step}
+            className="flex-1"
+            disabled={disabled}
+          />
+          <span className="text-xs font-mono w-12 text-right">{Number(value).toFixed(param.step && param.step < 1 ? 2 : 0)}</span>
+        </div>
       )}
-
+      
       {param.type === "select" && param.options && (
-        <Select
-          value={String(value)}
-          onValueChange={(v) => onChange(v)}
-          disabled={disabled}
-        >
-          <SelectTrigger className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs")}>
-            <SelectValue />
+        <Select value={String(value || "")} onValueChange={onChange} disabled={disabled}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue placeholder="选择..." />
           </SelectTrigger>
           <SelectContent>
-            {param.options.map((opt) => (
+            {param.options.map(opt => (
               <SelectItem key={opt.value} value={opt.value} className="text-xs">
                 {opt.label}
               </SelectItem>
@@ -1159,38 +894,18 @@ function ParamInput({ param, value, onChange, disabled, compact }: ParamInputPro
           </SelectContent>
         </Select>
       )}
-
-      {param.type === "file" && (
-        <Input
-          type="file"
+      
+      {param.type === "boolean" && (
+        <Switch
+          checked={Boolean(value)}
+          onCheckedChange={onChange}
           disabled={disabled}
-          className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs", "file:mr-2 file:py-0 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-secondary file:text-secondary-foreground")}
         />
+      )}
+      
+      {param.description && (
+        <p className="text-[10px] text-muted-foreground">{param.description}</p>
       )}
     </div>
   )
-}
-
-// ============ Mock 输出生成 ============
-
-function generateMockTextOutput(model: ModelSpec): string {
-  const samples = [
-    "这是一段由 AI 生成的测试文本。根据您的输入，系统已成功处理并返回结果。",
-    "分析完成。检测到 5 个场景，12 个角色，预计生成时间约 45 秒。",
-    '{"status": "success", "scenes": 5, "characters": 12}',
-  ]
-  return samples[Math.floor(Math.random() * samples.length)]
-}
-
-function generateMockMediaOutput(model: ModelSpec): Record<string, unknown> {
-  if (model.outputType === "image") {
-    return { type: "image", width: 1024, height: 1024, format: "PNG" }
-  }
-  if (model.outputType === "video") {
-    return { type: "video", width: 832, height: 480, duration: 5.0, fps: 16 }
-  }
-  if (model.outputType === "audio") {
-    return { type: "audio", duration: 10.0, sampleRate: 44100 }
-  }
-  return { type: "unknown" }
 }
