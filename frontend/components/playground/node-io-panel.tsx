@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Progress } from "@/components/ui/progress"
+import { ShotGridPanel, generateMockShots } from "./shot-grid-panel"
+import { MultiTrackTimeline, generateMockTracks } from "./multi-track-timeline"
 import {
   Play,
   FastForward,
@@ -34,7 +36,7 @@ import {
   Volume2,
   ExternalLink,
 } from "lucide-react"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 
 interface NodeIOPanelProps {
   nodeId: string | null
@@ -70,6 +72,17 @@ export function NodeIOPanel({
   const isCompleted = nodeData?.status === "completed"
   const isGateWaiting = nodeData?.status === "gate_waiting"
   const ioSpec = getNodeIOSpec(nodeId)
+
+  // 特殊节点判断
+  const isKeyframeNode = ["N10", "N11", "N12", "N13"].includes(nodeId)
+  const isVideoNode = ["N14", "N15", "N16", "N16b", "N17"].includes(nodeId)
+  const isAVIntegrationNode = nodeId === "N20" || nodeId === "N21" || nodeId === "N23"
+
+  // Mock 数据
+  const mockShots = useMemo(() => generateMockShots(45), [])
+  const mockTracks = useMemo(() => generateMockTracks(62), [])
+  const [timelineTime, setTimelineTime] = useState(0)
+  const [isTimelinePlaying, setIsTimelinePlaying] = useState(false)
 
   return (
     <div className="h-full flex flex-col">
@@ -200,15 +213,80 @@ export function NodeIOPanel({
             />
           </TabsContent>
           <TabsContent value="output" className="h-full m-0">
-            <IOContentPanel 
-              type="output" 
-              data={nodeData?.output} 
-              ioSpec={ioSpec?.output}
-              nodeSpec={nodeSpec}
-              isRunning={isRunning}
-              processData={ioSpec?.processData}
-              processDataValues={nodeData?.processData}
-            />
+            {/* 关键帧节点特殊渲染 */}
+            {isKeyframeNode ? (
+              <ScrollArea className="h-full">
+                <div className="pr-4 space-y-4">
+                  <ShotGridPanel
+                    shots={mockShots}
+                    type="keyframe"
+                    isRunning={isRunning}
+                    currentShotIndex={isRunning ? Math.floor(Math.random() * 45) : undefined}
+                  />
+                  {/* 过程数据 */}
+                  {ioSpec?.processData && ioSpec.processData.length > 0 && (
+                    <ProcessDataSection 
+                      processData={ioSpec.processData} 
+                      values={nodeData?.processData}
+                      isRunning={isRunning}
+                    />
+                  )}
+                </div>
+              </ScrollArea>
+            ) : isVideoNode ? (
+              <ScrollArea className="h-full">
+                <div className="pr-4 space-y-4">
+                  <ShotGridPanel
+                    shots={mockShots}
+                    type="video"
+                    isRunning={isRunning}
+                    currentShotIndex={isRunning ? Math.floor(Math.random() * 45) : undefined}
+                  />
+                  {/* 过程数据 */}
+                  {ioSpec?.processData && ioSpec.processData.length > 0 && (
+                    <ProcessDataSection 
+                      processData={ioSpec.processData} 
+                      values={nodeData?.processData}
+                      isRunning={isRunning}
+                    />
+                  )}
+                </div>
+              </ScrollArea>
+            ) : isAVIntegrationNode ? (
+              <ScrollArea className="h-full">
+                <div className="pr-4 space-y-4">
+                  <div className="bg-secondary/20 rounded-lg p-4">
+                    <h4 className="text-xs font-medium text-foreground mb-3">多轨时间线</h4>
+                    <MultiTrackTimeline
+                      tracks={mockTracks}
+                      totalDuration={62}
+                      currentTime={timelineTime}
+                      isPlaying={isTimelinePlaying}
+                      onTimeChange={setTimelineTime}
+                      onPlayPause={() => setIsTimelinePlaying(!isTimelinePlaying)}
+                    />
+                  </div>
+                  {/* 过程数据 */}
+                  {ioSpec?.processData && ioSpec.processData.length > 0 && (
+                    <ProcessDataSection 
+                      processData={ioSpec.processData} 
+                      values={nodeData?.processData}
+                      isRunning={isRunning}
+                    />
+                  )}
+                </div>
+              </ScrollArea>
+            ) : (
+              <IOContentPanel 
+                type="output" 
+                data={nodeData?.output} 
+                ioSpec={ioSpec?.output}
+                nodeSpec={nodeSpec}
+                isRunning={isRunning}
+                processData={ioSpec?.processData}
+                processDataValues={nodeData?.processData}
+              />
+            )}
           </TabsContent>
           <TabsContent value="thinking" className="h-full m-0">
             <ThinkingPanel nodeData={nodeData} nodeSpec={nodeSpec} />
@@ -245,6 +323,36 @@ function MetricItem({
         ) : (
           <p className={cn("text-sm font-medium", valueColor || "text-foreground")}>{value}</p>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Process Data Section component
+function ProcessDataSection({
+  processData,
+  values,
+  isRunning,
+}: {
+  processData: IOFieldSpec[]
+  values?: Record<string, unknown>
+  isRunning?: boolean
+}) {
+  return (
+    <div className="mt-4 pt-4 border-t border-border/50">
+      <h4 className="text-xs font-medium text-muted-foreground mb-3">过程数据</h4>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {processData.map((field) => (
+          <div key={field.key} className="bg-secondary/30 rounded-lg p-3">
+            <p className="text-[10px] text-muted-foreground mb-1">{field.label}</p>
+            <p className="text-xs font-medium text-foreground">
+              {values?.[field.key] != null 
+                ? String(values[field.key])
+                : isRunning ? <Skeleton className="h-4 w-16" /> : "—"
+              }
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   )

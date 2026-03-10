@@ -276,3 +276,142 @@
     #F59E0B 240deg 360deg
   );
 }
+
+/* Image/Video generating effect */
+@keyframes generating {
+  0% {
+    background-position: 0% 50%;
+    opacity: 0.3;
+  }
+  50% {
+    background-position: 100% 50%;
+    opacity: 0.6;
+  }
+  100% {
+    background-position: 0% 50%;
+    opacity: 0.3;
+  }
+}
+
+@keyframes border-flow {
+  0% {
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    border-color: rgba(59, 130, 246, 0.8);
+  }
+  100% {
+    border-color: rgba(59, 130, 246, 0.3);
+  }
+}
+
+@keyframes progress-stripes {
+  0% {
+    background-position: 1rem 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}
+
+.generating-placeholder {
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.1) 0%,
+    rgba(139, 92, 246, 0.1) 50%,
+    rgba(59, 130, 246, 0.1) 100%
+  );
+  background-size: 200% 200%;
+  animation: generating 3s ease-in-out infinite;
+}
+
+.generating-border {
+  animation: border-flow 2s ease-in-out infinite;
+}
+
+.progress-animated {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  animation: progress-stripes 1s linear infinite;
+}
+
+/* Shot card generating effect */
+.shot-generating {
+  position: relative;
+  overflow: hidden;
+}
+
+.shot-generating::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.2) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  pointer-events: none;
+}
+
+/* Timeline playhead glow */
+.playhead-glow {
+  box-shadow: 0 0 8px 2px rgba(239, 68, 68, 0.5);
+}
+
+/* Track clip hover effect */
+.track-clip-hover {
+  transition: all 0.15s ease;
+}
+
+.track-clip-hover:hover {
+  filter: brightness(1.2);
+  transform: scaleY(1.1);
+}
+
+/* Waveform animation for audio */
+@keyframes waveform-pulse {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.3);
+  }
+}
+
+.waveform-bar {
+  animation: waveform-pulse 0.5s ease-in-out infinite;
+}
+
+.waveform-bar:nth-child(2n) {
+  animation-delay: 0.1s;
+}
+
+.waveform-bar:nth-child(3n) {
+  animation-delay: 0.2s;
+}
+
+/* QC score pulse for high scores */
+@keyframes score-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(16, 185, 129, 0.3);
+  }
+}
+
+.score-excellent {
+  animation: score-glow 2s ease-in-out infinite;
+}
