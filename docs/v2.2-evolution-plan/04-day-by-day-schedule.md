@@ -100,7 +100,7 @@
 - [ ] 前端 `/admin/costs/` 可渲染
 - [ ] **前后端联调** M17 全部 12 个 API 实现，F15 mock→真实 API 切换完成
 - [ ] **🔬 GPU** FLUX.2 txt2img **通过 N07 handler** 真实出图（非仅 ComfyUI API）
-- [ ] **🔬 GPU** FLUX+FireRed **通过 N10 handler** 多参考关键帧出图
+- [ ] **🔬 GPU** N10 两阶段验证: Phase1 LLM prompt编排 + Phase2 FLUX+FireRed 多参考关键帧出图
 - [ ] **🔬 GPU** LTX-2.3 **通过 N14 handler** 真实出视频
 - [ ] **🔬 GPU** CosyVoice **通过 N07b handler** 真实出音色候选
 - [ ] **⚡ 运维** 全服务连通性报告：PG/Redis/TOS/Qdrant/RocketMQ/ComfyUI 全部 VKE Pod 内可达

@@ -216,7 +216,7 @@ COSYVOICE_API_URL=http://localhost:8080
 | Handler 文件 | 节点 | GPU 依赖模型 | 解除阻塞条件 |
 |-------------|------|------------|-------------|
 | `comfyui_gen.py` | N07 美术生成 | FLUX.2 (txt2img) | 运维 O7+O8 完成 |
-| `comfyui_gen.py` | N10 关键帧生成 | FLUX.2 (img2img) | 运维 O7+O8 完成 |
+| `comfyui_gen.py` | N10 关键帧生成 | Phase1: LLM prompt编排 + Phase2: FLUX.2+FireRed (ComfyUI) | Phase1 即可运行; Phase2 需运维 O7+O8 完成 |
 | `comfyui_gen.py` | N14 视频生成 | LTX-2.3 (img2vid) | 运维 O7+O8 完成 |
 | 新增 `handle_N07b` | N07b 音色生成 | CosyVoice | 运维 O8 完成 |
 | `av_handlers.py` | N20 BGM/SFX | ACE-Step 1.5 + HunyuanFoley | 运维 O8 完成 |

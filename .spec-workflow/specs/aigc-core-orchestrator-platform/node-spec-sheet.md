@@ -1155,14 +1155,38 @@ N05 定稿分镜 (frozen + graded)
 
 执行粒度：**per shot** — 每个镜头独立生成关键帧候选
 
-核心动作：
-1. 从 `ShotSpec.keyframe_specs` 读取关键时间点和构图骨架
-2. 从 `FrozenArtAsset` 获取角色参考图（FireRed 锚点）
-3. 组装 ComfyUI workflow：关键帧图 prompt + ControlNet/OpenPose（如有） + FireRed MultiRef（角色一致性） + IP-Adapter
-4. 按 `difficulty` 决定候选数：S0→1-2, S1→2-3, S2→3-4
-5. 批量提交 ComfyUI 生成
+**两阶段执行**：
+
+**Phase 1 — LLM Prompt 编排**（per shot, 1 次 LLM 调用）：
+1. 从 `ShotSpec` 读取 `keyframe_count`（S0=1, S1=2, S2=4）和 `candidate_count`（S0=2, S1=3, S2=4）
+2. 从 `FrozenArtAsset` 提取角色外貌/服装/场景描述作为上下文
+3. 调用 LLM 为每个关键帧的每个候选生成**独立的详细生图 prompt**
+   - 同一 keyframe 下的不同 candidate prompt：核心构图一致，光影/微表情/色温做微妙变化
+   - 不同 keyframe 之间：保持角色/服装/场景/光影连续性，动作按时间线发展
+   - 同时生成 `motion_script`（帧间过渡运动描述），供 N14 视频生成使用
+4. LLM 失败时降级为 N02 keyframe_specs 基础 prompt + seed variation
+
+**Phase 2 — ComfyUI 执行生图**（双循环: keyframe_count × candidate_count）：
+5. 从 `FrozenArtAsset` 获取角色参考图（FireRed 锚点）
+6. 组装 ComfyUI workflow：Phase 1 的 prompt + ControlNet/OpenPose（如有） + FireRed MultiRef（角色一致性）
+7. 批量提交 ComfyUI 生成
+
+总生成数 = keyframe_count × candidate_count：S0→1×2=2, S1→2×3=6, S2→4×4=16
 
 #### 模型配置
+
+**Phase 1 — LLM Prompt 编排**：
+
+| 字段 | 值 | 状态 |
+|------|-----|------|
+| provider | `llm` | ✅ |
+| primary_model | `Gemini 3.1` | ✅ prompt 创作需要质量 |
+| backup_model | `Claude Opus 4.6` | ✅ |
+| temperature | `0.6` | ✅ 创作性 prompt 需要适度随机 |
+| max_tokens | `8192` | ✅ |
+| prompt_diversity | `llm_per_candidate` | ✅ 每个 candidate 独立 prompt（非 seed_variation） |
+
+**Phase 2 — ComfyUI 执行生图**：
 
 | 字段 | 值 | 状态 |
 |------|-----|------|
@@ -1174,7 +1198,7 @@ N05 定稿分镜 (frozen + graded)
 | controlnet_strategy | 根据 shot_type 自动选：多人→OpenPose，复杂构图→Depth，特写→无 | ✅ |
 | resolution | `2048×1152`（2K 横屏）/ `1152×2048`（竖屏） | ✅ |
 
-> ✅ **已确认**：关键帧是静态图，主模型 `FLUX.2 Dev` + `FireRed`（角色一致性），LTX 留给 N14 视频。
+> ✅ **已确认**：关键帧是静态图，Phase 1 用 LLM 生成高质量 prompt，Phase 2 用 `FLUX.2 Dev` + `FireRed` 生图。LTX 留给 N14 视频。
 > ControlNet 根据镜头类型自动选择。分辨率 2K，暂不上 4K。
 
 #### 运行时配置
@@ -1190,7 +1214,8 @@ N05 定稿分镜 (frozen + graded)
 
 | artifact_type | anchor_type | anchor_id | 说明 |
 |---------------|-------------|-----------|------|
-| `keyframe` | shot | shot_id | 每个镜头的候选关键帧图 |
+| `prompt_json` | shot | shot_id | Phase 1 LLM 生成的 per-keyframe per-candidate prompt 集 + motion_script |
+| `keyframe` | shot | shot_id | Phase 2 每个镜头的候选关键帧图 |
 | `comfyui_workflow` | shot | shot_id | 执行的 workflow JSON |
 
 ---
@@ -1427,14 +1452,23 @@ N09 固化美术资产 + N06 生成方案
   │
   ├── FrozenArtAsset[] (角色基线+变体)
   ├── ArtGenerationPlan
-  ├── ShotSpec[] (含 keyframe_specs 骨架)
+  ├── ShotSpec[] (含 keyframe_count/candidate_count)
   │
   ▼  (per shot 并行)
-┌─────────┐     ShotSpec + FrozenArtAsset + ArtPlan
-│   N10   │ ──────────────────► CandidateSet<ShotVisualCandidate>
-│关键帧生成│     FLUX.2 Dev + FireRed MultiRef, 2K
-│ ComfyUI │     S0→1-2 / S1→2-3 / S2→3-4, ControlNet 自动选
-└────┬────┘
+┌──────────────────────────────────────────────────────────────┐
+│                        N10 关键帧生成                         │
+│                                                              │
+│  Phase 1 — LLM Prompt 编排 (Gemini 3.1, 1次LLM/shot)        │
+│    ShotSpec + FrozenArtAsset 摘要                             │
+│    → 每个 keyframe × 每个 candidate 的详细生图 prompt          │
+│    → motion_script (帧间过渡运动描述)                          │
+│    prompt 多样性: llm_per_candidate (非 seed_variation)       │
+│                         │                                    │
+│  Phase 2 — ComfyUI 执行生图 (FLUX.2 Dev + FireRed, 零LLM)   │
+│    双循环: keyframe_count × candidate_count                   │
+│    S0→1×2=2 / S1→2×3=6 / S2→4×4=16, ControlNet 自动选       │
+│    → CandidateSet<ShotVisualCandidate> + motion_script        │
+└────────────────────────────┬─────────────────────────────────┘
      │
      ▼  (per shot, qc_tier 决定模型数)
 ┌─────────┐     CandidateSet + FrozenArtAsset (参考)
@@ -1467,7 +1501,7 @@ N09 固化美术资产 + N06 生成方案
 
 | # | 决策 | 结论 |
 |---|------|------|
-| K1 | N10 关键帧主模型 | ✅ FLUX.2 Dev + FireRed（静态图像优势），LTX 留给视频 |
+| K1 | N10 关键帧主模型 | ✅ Phase 1: LLM (Gemini 3.1) 生成 prompt; Phase 2: FLUX.2 Dev + FireRed 生图。LTX 留给视频 |
 | K2 | ControlNet 策略 | ✅ 按 shot_type 自动选：多人→OpenPose，复杂构图→Depth，特写→无 |
 | K3 | 关键帧分辨率 | ✅ 2K（2048×1152），暂不上 4K |
 | K4 | N11 质检阈值 | ✅ 加权总分（weighted_average），< 7.5 打回 |

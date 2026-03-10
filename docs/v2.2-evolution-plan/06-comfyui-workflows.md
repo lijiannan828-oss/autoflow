@@ -1,8 +1,60 @@
 # 06 - ComfyUI 工作流清单与部署指南
 
-> **整理日期**: 2026-03-09
+> **整理日期**: 2026-03-09 | **适配验证**: 2026-03-10
 > **用途**: 供运维 Agent 直接下载 JSON 工作流文件并部署到 ComfyUI 实例
 > **原则**: 优先选择官方/Comfy-Org 维护的工作流，其次选口碑好的社区方案
+
+---
+
+## P0 工作流适配清单（2026-03-10 验证）
+
+> 仅包含 `05-model-evaluation.md` 选型覆盖的模型，已验证工作流兼容性。
+
+| # | 模型 | 工作流 JSON | 下载链接 | 状态 |
+|---|------|-----------|---------|------|
+| 1 | FLUX.2 Dev 32B | 官方教程内嵌，拖拽示例图提取 | https://docs.comfy.org/tutorials/flux/flux-2-dev | ✅ |
+| 2 | Z-Image-Turbo | `z_image_turbo_t2i.json` | Comfy-Org 模板 `image_z_image_turbo.json` | ✅ |
+| 3 | Wan2.2 14B I2V | `wan22_14B_i2v.json` | Comfy-Org 模板 `video_wan2_2_14B_i2v.json` | ✅ |
+| 4 | Wan2.2 14B T2V | `wan22_14B_t2v.json` | Comfy-Org 模板 `video_wan2_2_14B_t2v.json` | ✅ |
+| 5 | Wan2.2 14B FLF2V | `wan22_14B_flf2v.json` | Comfy-Org 模板 `video_wan2_2_14B_flf2v.json` | ✅ |
+| 6 | LTX-Video 2.3 I2V | `ltx23_i2v.json` | Comfy-Org 模板 `video_ltx2_3_i2v.json` | ✅ |
+| 7 | LTX-Video 2.3 T2V | `ltx23_t2v.json` | Comfy-Org 模板 `video_ltx2_3_t2v.json` | ✅ |
+| 8 | FireRed-1.1 | `firered_1.1_official.json` | HuggingFace `FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI` | ✅ |
+| 9 | PuLID-FLUX | `pulid_flux_16bit.json` | GitHub `balazik/ComfyUI-PuLID-Flux` | ✅ |
+| 10 | CosyVoice 3.0 | `cosyvoice3_tts.json` | GitHub `filliptm/ComfyUI_FL-CosyVoice3` | ✅ |
+| 11 | ACE-Step 1.5 | `ace_step_text2music.json` | GitHub `ace-step/ACE-Step-ComfyUI` | ✅ |
+| 12 | HunyuanVideo-Foley | `hunyuan_foley_v2a.json` | GitHub `if-ai/ComfyUI_HunyuanVideoFoley` | ✅ |
+| 13 | LatentSync v1.6 | `latentsync_basic.json` | GitHub `ShmuelRonen/ComfyUI-LatentSyncWrapper` | ⚠️ v1.5 工作流，换 checkpoint 兼容 |
+| 14 | SeedVR2 | `seedvr2_hd_video.json` | GitHub `numz/ComfyUI-SeedVR2_VideoUpscaler` | ✅ |
+
+> **注意**: LatentSync 工作流基于 v1.5，v1.6 模型只需替换 checkpoint 即可兼容。
+> **注意**: LTX HF 路径为 `Lightricks/LTX-2.3`（05 文档写的 `LTX-Video-2.3` 可能 404，运维需确认）。
+
+### 一键下载脚本
+
+```bash
+#!/bin/bash
+set -e
+BASE_DIR="/data/comfyui/workflows"
+T="https://raw.githubusercontent.com/Comfy-Org/workflow_templates/refs/heads/main/templates"
+mkdir -p "$BASE_DIR"/{wan22,ltx,firered,pulid,cosyvoice,ace-step,hunyuan-foley,latentsync,seedvr2,z-image}
+
+curl -sL -o "$BASE_DIR/z-image/z_image_turbo_t2i.json"        "$T/image_z_image_turbo.json"
+curl -sL -o "$BASE_DIR/wan22/wan22_14B_i2v.json"              "$T/video_wan2_2_14B_i2v.json"
+curl -sL -o "$BASE_DIR/wan22/wan22_14B_t2v.json"              "$T/video_wan2_2_14B_t2v.json"
+curl -sL -o "$BASE_DIR/wan22/wan22_14B_flf2v.json"            "$T/video_wan2_2_14B_flf2v.json"
+curl -sL -o "$BASE_DIR/ltx/ltx23_t2v.json"                    "$T/video_ltx2_3_t2v.json"
+curl -sL -o "$BASE_DIR/ltx/ltx23_i2v.json"                    "$T/video_ltx2_3_i2v.json"
+curl -sL -o "$BASE_DIR/firered/firered_1.1_official.json"      "https://huggingface.co/FireRedTeam/FireRed-Image-Edit-1.1-ComfyUI/resolve/main/firered-image-edit-1.1.json"
+curl -sL -o "$BASE_DIR/pulid/pulid_flux_16bit.json"            "https://raw.githubusercontent.com/balazik/ComfyUI-PuLID-Flux/master/examples/pulid_flux_16bit_simple.json"
+curl -sL -o "$BASE_DIR/cosyvoice/cosyvoice3_tts.json"         "https://raw.githubusercontent.com/filliptm/ComfyUI_FL-CosyVoice3/main/workflows/CosyVoice.json"
+curl -sL -o "$BASE_DIR/ace-step/ace_step_text2music.json"      "https://raw.githubusercontent.com/ace-step/ACE-Step-ComfyUI/main/workflows/text2music.json"
+curl -sL -o "$BASE_DIR/hunyuan-foley/hunyuan_foley_v2a.json"   "https://raw.githubusercontent.com/if-ai/ComfyUI_HunyuanVideoFoley/main/example_workflows/hunyuan_foley.json"
+curl -sL -o "$BASE_DIR/latentsync/latentsync_basic.json"       "https://raw.githubusercontent.com/ShmuelRonen/ComfyUI-LatentSyncWrapper/main/example_workflows/latentsync1.5_comfyui_basic.json"
+curl -sL -o "$BASE_DIR/seedvr2/seedvr2_hd_video.json"         "https://raw.githubusercontent.com/numz/ComfyUI-SeedVR2_VideoUpscaler/main/example_workflows/SeedVR2_HD_video_upscale.json"
+
+echo "=== 下载完成: $(find "$BASE_DIR" -name '*.json' | wc -l) 个工作流 ==="
+```
 
 ---
 
@@ -517,7 +569,9 @@ N09 (角色固化)
  ├─ FireRed 1.1 MultiRef              ← firered_1.1_official.json
  └─ PuLID-FLUX (人脸 ID)             ← pulid_flux_16bit.json
 
-N10 (关键帧生成)
+N10 (关键帧生成) — 两阶段
+ Phase 1: LLM (Gemini 3.1) 为每帧×每候选生成独立 prompt + motion_script
+ Phase 2: ComfyUI 执行生图 ↓
  ├─ FLUX.2 Dev + FireRed + PuLID      ← 组合工作流
  ├─ IP-Adapter Multi (风格一致)        ← ipadapter_multi.json
  └─ Z-Image-Turbo (降级)              ← z_image_turbo_t2i.json
@@ -605,4 +659,5 @@ git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus
 
 | 日期 | 变更 |
 |------|------|
-| 2026-03-09 | 初始版本，15 类工作流全量收录，一键下载脚本 |
+| 2026-03-10 | v1.1 — 增加「适配验证」章节：模型→工作流兼容矩阵 + P0 一键下载脚本 + 版本差异警告（Stable Audio "2.5" 不存在、LTX HF 路径修正、LatentSync v1.5→v1.6 兼容说明） |
+| 2026-03-09 | v1.0 — 初始版本，15 类工作流全量收录，一键下载脚本 |

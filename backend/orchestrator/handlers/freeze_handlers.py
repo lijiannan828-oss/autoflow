@@ -481,6 +481,29 @@ def handle_n13(node_id: str, state: PipelineState, config: dict[str, Any]) -> No
 
         frozen_keyframes.append(frozen_kf)
 
+    # Propagate motion_script from N10 candidate_sets for downstream N14
+    # N14 needs motion_script to guide video generation timing
+    n10_output = load_node_output_payload("N10", state, default={})
+    motion_scripts_by_shot: dict[str, str] = {}
+    if isinstance(n10_output, dict):
+        for shot_id_key, shot_data in n10_output.items():
+            if isinstance(shot_data, dict) and shot_data.get("motion_script"):
+                motion_scripts_by_shot[shot_id_key] = shot_data["motion_script"]
+        # Also check flat structure: n10_output.per_shot_results[]
+        for shot_result in n10_output.get("per_shot_results", []):
+            if isinstance(shot_result, dict):
+                sid = shot_result.get("shot_id", "")
+                cs = shot_result.get("candidate_set", {})
+                if isinstance(cs, dict) and cs.get("motion_script"):
+                    motion_scripts_by_shot[sid] = cs["motion_script"]
+
+    # Attach motion_script to each frozen keyframe
+    for fkf in frozen_keyframes:
+        sid = fkf.get("shot_id", "")
+        ms = motion_scripts_by_shot.get(sid, "")
+        if ms:
+            fkf["motion_script"] = ms
+
     payload = {
         "frozen_keyframes": frozen_keyframes,
         "total_frozen": len(frozen_keyframes),

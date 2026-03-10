@@ -62,7 +62,7 @@ NODE_REGISTRY_SEEDS: list[NodeRegistrySeed] = [
         estimated_duration_s=0,
     ),
     NodeRegistrySeed("N09", "美术定稿固化", "art", "visual_director", ["N08"], comfyui_workflow_id="wf-art-freeze", estimated_duration_s=240),
-    NodeRegistrySeed("N10", "关键帧生成", "keyframe", "visual_director", ["N06", "N09"], comfyui_workflow_id="wf-keyframe-generate", estimated_duration_s=900),
+    NodeRegistrySeed("N10", "关键帧生成(LLM+ComfyUI两阶段)", "keyframe", "visual_director", ["N06", "N09"], comfyui_workflow_id="wf-keyframe-generate", estimated_duration_s=300),
     NodeRegistrySeed("N11", "关键帧质检", "keyframe", "quality_guardian", ["N10"], reject_target_node_id="N10", estimated_duration_s=120),
     NodeRegistrySeed("N12", "跨镜头连续性检查", "keyframe", "storyboard_planner", ["N11"], estimated_duration_s=75),
     NodeRegistrySeed("N13", "关键帧定稿固化", "keyframe", "visual_director", ["N12"], comfyui_workflow_id="wf-keyframe-final", estimated_duration_s=180),
@@ -157,6 +157,12 @@ def _model_config(seed: NodeRegistrySeed) -> dict[str, Any]:
         return {"mode": "human_gate"}
     if seed.stage_group == "script":
         return {"provider": "llm", "profile": "text-reasoning"}
+    if seed.node_id == "N10":
+        return {
+            "provider": "hybrid",
+            "phase1": {"provider": "llm", "model": "gemini-3.1-pro-preview", "profile": "prompt-engineering"},
+            "phase2": {"provider": "comfyui", "workflow_id": seed.comfyui_workflow_id},
+        }
     if seed.stage_group in {"art", "keyframe", "video", "final"}:
         return {"provider": "comfyui", "workflow_id": seed.comfyui_workflow_id}
     if seed.stage_group == "audio":
@@ -168,7 +174,7 @@ def _produces_artifacts(seed: NodeRegistrySeed) -> list[str]:
     mapping = {
         "N07": ["image"],
         "N09": ["image", "prompt_json", "comfyui_workflow"],
-        "N10": ["image"],
+        "N10": ["prompt_json", "image", "comfyui_workflow"],
         "N13": ["image", "prompt_json", "comfyui_workflow"],
         "N14": ["video"],
         "N17": ["video", "comfyui_workflow"],

@@ -73,11 +73,13 @@ Agent 采用三层决策模型（§2.4），按 context.mode 分流：
 
 第一层：集级策划（plan_episode）— N02/N06 触发，1 次 LLM 覆盖全集 30-60 镜头
   产出"全集作战计划"：镜头参数表、资源分配、风格锚定
-第二层：镜头级执行（execute_shot）— N10/N14 触发，零 LLM（规则+记忆快查+参数微调+自检重试）
+第二层：镜头级执行（execute_shot）— N10/N14 触发
+  N10 两阶段：Phase 1 调用 LLM 为每个关键帧×每个候选生成详细生图 prompt（1次LLM/shot）→ Phase 2 提交 ComfyUI 批量生图（零LLM）
+  N14 纯 ComfyUI 执行，零 LLM
   confidence 低于阈值时降级回 LLM 单次推理（trace_type=execute_fallback）
 第三层：批后复盘（review_batch）— N12/N16 触发，1 次多模态 LLM 分析全集产物连续性
 
-每集 LLM 调用 3-5 次（vs 旧模式 60-120 次），成本降低一个数量级。
+每集 LLM 决策调用 3-5 次 + N10 每镜头 1 次 prompt 编排（轻量，可并行），vs 旧模式 60-120 次重量级推理，成本降低一个数量级。
 非生产 Agent（Supervisor/EvolutionEngine）继续使用 reason()+act() 旧接口。
 
 Agent 通过 register_agent() 注册到 LangGraph handler 中，保持现有流水线拓扑不变。

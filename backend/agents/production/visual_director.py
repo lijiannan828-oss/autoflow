@@ -45,9 +45,11 @@ class VisualDirectorAgent(BaseAgent):
     # ── Layer 2: execute_shot (N07/N09/N10/N13/N14/N17/N19) ──────────
 
     def execute_shot(self, context: AgentContext) -> dict[str, Any]:
-        """Per-shot visual generation. Zero LLM — ComfyUI workflow dispatch.
+        """Per-shot visual generation. Two-phase for N10, zero LLM for others.
 
-        Reads episode visual plan + shot params, constructs ComfyUI workflow.
+        N10 (keyframe gen): Phase 1 calls LLM to generate per-keyframe per-candidate
+        prompts (1 LLM call/shot), then Phase 2 submits to ComfyUI (zero LLM).
+        N07/N09/N13/N14/N17/N19: pure ComfyUI dispatch, zero LLM.
         Stub: return placeholder (GPU not deployed).
         """
         logger.info("visual_director.execute_shot: node=%s (stub, GPU not deployed)", context.node_id)

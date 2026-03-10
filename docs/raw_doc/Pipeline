@@ -744,7 +744,7 @@ Step 6: 人确认后全量替换，旧版归档
 
 | 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
 |:---:|------|------|------|------|:---:|:---:|---------|
-| **N10** | 关键帧生成 | ShotSpec + FrozenArtAsset + ArtPlan | CandidateSet\<ShotVisualCandidate\> | FLUX.2 Dev + FireRed (ComfyUI) | S0→1-2/S1→2-3/S2→3-4 | ✗ | per shot并行；ControlNet按shot_type自动选；2K分辨率 |
+| **N10** | 关键帧生成 | ShotSpec + FrozenArtAsset + ArtPlan | CandidateSet\<ShotVisualCandidate\> + motion_script | Phase1: LLM (Gemini 3.1) + Phase2: FLUX.2 Dev + FireRed (ComfyUI) | S0:1kf×2=2 / S1:2kf×3=6 / S2:4kf×4=16 | ✗ | **两阶段**: Phase1 LLM为每帧每候选生成独立prompt(llm_per_candidate) → Phase2 ComfyUI批量生图；双循环: keyframe_count(1/2/4) × candidate_count(2/3/4)；ControlNet按shot_type自动选；2K分辨率 |
 | **N11** | 关键帧质检 | 候选关键帧 + FrozenArtAsset参考 | QualityScore + 选定最佳候选 | 按qc_tier动态选模型数 + ReActor/FaceID | — | ✗ | 加权总分<7.5打回N10(max 3)；自动选最高分 |
 | **N12** | 跨镜头连续性检查 | 全集选定关键帧（按序） | ContinuityReport | Gemini 3.1 (多模态) | — | ✗ | 多图理解分析角色一致/场景切换/节奏 |
 | **N13** | 关键帧定稿 | 选定关键帧 + ContinuityReport | FrozenKeyframe[] | FireRed Edit(条件调用) | — | ✗ | 无issue→直接固化；有issue→FireRed微调 |
@@ -753,7 +753,7 @@ Step 6: 人确认后全量替换，旧版归档
 
 | 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
 |:---:|------|------|------|------|:---:|:---:|---------|
-| **N14** | 视频素材生成 | FrozenKeyframe + ShotSpec + FrozenAssets | CandidateSet\<VideoCandidate\> | LTX-2.3 (默认) + HuMo(S2条件) | S0→1-2/S1→2-3/S2→3-4 | ✗ | 1080p；生成略长+0.5~1s |
+| **N14** | 视频素材生成 | FrozenKeyframe + ShotSpec + FrozenAssets | CandidateSet\<VideoCandidate\> | LTX-2.3 (默认) + LTX-I2V(2/4kf) + HuMo(S2+4kf) | S0:2 / S1:3 / S2:4 视频候选 | ✗ | 1080p；按keyframe_count选工作流(1kf/2kf/4kf)；生成略长+0.5~1s |
 | **N15** | 视频质检 | VideoCandidate[] + 参考资产 | QualityScore + 选定候选 | 按qc_tier + ReActor/Physics | — | ✗ | 加权<7.5打回；单维度<5直接打回 |
 | **N16** | 剧情节奏连续性 | 全集选定视频（按序） | PacingReport | Gemini 3.1 (多模态) | — | ✗ | 节奏分析+剪辑建议+时长偏差 |
 | **N16b** | 影调与节奏调整 | FrozenVideo[] + PacingReport + EpisodeScript | 调整后的视频序列 + 更新的时间轴 | FFmpeg(剪辑) + Gemini 3.1(决策) | — | ✗ | 调整镜头长短/影调一致化/转场；与TTS同阶段 |

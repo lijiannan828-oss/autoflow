@@ -11,6 +11,7 @@ GPU 降级策略:
 
 from __future__ import annotations
 
+import json
 import logging
 import random
 import time
@@ -18,6 +19,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from backend.common.llm_client import LLMError, SCRIPT_STAGE_MODEL, call_llm
 from backend.common.tos_client import upload_bytes, upload_json
 from backend.orchestrator.comfyui_client import (
     ComfyUIError,
@@ -41,7 +43,9 @@ _REGISTERED = False
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
-# Candidate counts by difficulty / importance
+# Keyframe time-anchor count by difficulty (S0=1 frame, S1=2, S2=4)
+KEYFRAME_COUNT_BY_DIFFICULTY = {"S0": 1, "S1": 2, "S2": 4}
+# Candidate draws per keyframe by difficulty
 CANDIDATE_COUNT_BY_DIFFICULTY = {"S0": 2, "S1": 3, "S2": 4}
 CANDIDATE_COUNT_BY_IMPORTANCE = {
     "major": 5, "supporting": 3, "extra": 2,
@@ -916,129 +920,372 @@ def _get_ref_images_for_shot(
     return ref_images[:3]  # FireRed MultiRef max 3
 
 
+# ── N10 Phase 1: LLM Keyframe Prompt Generation ─────────────────────────
+
+# Model for keyframe prompt generation (same quality tier as script stage)
+N10_PROMPT_MODEL = SCRIPT_STAGE_MODEL
+
+_N10_KEYFRAME_PROMPT_SYSTEM = """\
+你是 AIGC 关键帧图像生成的 Prompt 编排专家。
+
+你将收到一个镜头（ShotSpec），包括：
+- visual_prompt（基础画面描述）
+- motion_segments（分段动作描述）
+- keyframe_specs（N02 的粗略关键帧骨架，仅供参考）
+- characters_in_shot（角色出场信息）
+- camera_movement（运镜）
+- duration_sec（时长）
+- difficulty（S0/S1/S2）
+- keyframe_count（需要生成的关键帧数: 1/2/4）
+- candidate_count（每个关键帧的抽卡数: 2/3/4）
+
+你还将收到冻结的美术资产摘要（FrozenAssets），包含已审核定稿的角色外貌和服装描述。
+
+你的任务：为每个关键帧的每次抽卡生成一个**可直接用于 FLUX 图像生成的英文 prompt**。
+
+## 输出格式
+
+输出 JSON：
+{
+  "keyframes": [
+    {
+      "keyframe_index": 0,
+      "timestamp_ratio": 0.0,
+      "timestamp_sec": 0.0,
+      "scene_description": "这一帧画面在整个镜头中的叙事作用（中文，简要）",
+      "candidates": [
+        {
+          "candidate_index": 0,
+          "prompt": "English prompt for image generation...",
+          "negative_prompt": "English negative prompt..."
+        },
+        ...
+      ]
+    },
+    ...
+  ],
+  "motion_script": "00.0s-Xs: ...\\nXs-Ys: ...\\nYs-Zs: ..."
+}
+
+## Prompt 编写规则
+
+1. 每个 prompt 必须是完整、独立的英文图像生成描述，包含：
+   - 角色外貌（从 FrozenAssets 获取，必须精确匹配：五官、发色、肤色、体型、服装）
+   - 角色姿态和表情（与该时间点的动作匹配）
+   - 角色在画面中的位置
+   - 景别和镜头角度（与 shot_type 匹配）
+   - 光影和色调（与场景 time_of_day 匹配）
+   - 背景/场景细节
+
+2. 同一 keyframe_index 下的多个 candidate prompt 应当：
+   - 核心构图和角色外貌保持一致
+   - 在以下维度做微妙变化：光影角度、角色微表情、背景细节层次、色温偏移
+   - 变化幅度适中：能看出差异但不破坏镜头的叙事意图
+
+3. 不同 keyframe_index 之间必须保持：
+   - 角色服装、道具、发型完全一致（同一镜头内不换装）
+   - 场景/背景连续性（同一地点）
+   - 光影方向连续性（太阳/灯光不跳变）
+   - 动作的时间逻辑（keyframe_1 → 2 → 3 → 4 是时间线上的连续发展）
+
+4. motion_script 描述关键帧之间的过渡运动轨迹，格式：
+   "0.0s-1.0s: 角色从画面左侧走向中央\\n1.0s-2.0s: 镜头推进到特写"
+
+5. prompt 格式参考：
+   "Film still, ultra photorealistic, [shot_type], [character description with exact appearance from frozen assets], [pose/action], [expression], [clothing], [background/scene], [lighting], [camera angle]"
+
+6. negative_prompt 应排除常见 AI 生图缺陷，可在基础 negative 上针对该帧做微调"""
+
+
+def _n10_build_asset_summary(frozen_assets: list[dict], shot_spec: dict) -> str:
+    """Build a concise text summary of frozen art assets relevant to this shot."""
+    chars_in_shot = {
+        c.get("character_id")
+        for c in shot_spec.get("characters_in_shot", [])
+        if isinstance(c, dict) and c.get("character_id")
+    }
+
+    lines: list[str] = []
+    for asset in frozen_assets:
+        if not isinstance(asset, dict):
+            continue
+        asset_type = asset.get("asset_type", "")
+        target_id = asset.get("character_id") or asset.get("location_id") or asset.get("target_id", "")
+
+        # Only include characters that appear in this shot + the shot's location
+        if asset_type == "character" and target_id and target_id not in chars_in_shot:
+            continue
+
+        name = asset.get("name") or target_id
+        desc = asset.get("description") or asset.get("base_prompt", "")
+        if desc:
+            lines.append(f"[{asset_type}] {name}: {desc}")
+
+        # Include costume/variant info
+        for variant in asset.get("variants", []):
+            if isinstance(variant, dict) and variant.get("description"):
+                v_label = variant.get("label", variant.get("costume_id", "variant"))
+                lines.append(f"  - {v_label}: {variant['description']}")
+
+    return "\n".join(lines) if lines else "(no frozen assets available)"
+
+
+def _n10_generate_keyframe_prompts(
+    shot_spec: dict,
+    frozen_assets: list[dict],
+) -> tuple[dict | None, float]:
+    """Phase 1: Call LLM to generate detailed per-keyframe per-candidate prompts.
+
+    Returns (parsed_json, llm_cost_cny).  parsed_json has
+    keyframes[].candidates[].prompt structure, or None if LLM call fails
+    (caller should fall back to basic prompts).
+    """
+    shot_id = shot_spec.get("shot_id", "unknown")
+    keyframe_count = shot_spec.get("keyframe_count", 1)
+    candidate_count = shot_spec.get("candidate_count", 2)
+
+    # Build user prompt with shot context
+    asset_summary = _n10_build_asset_summary(frozen_assets, shot_spec)
+
+    # Slim down shot_spec for LLM (remove heavy fields)
+    slim_shot = {
+        k: shot_spec[k] for k in (
+            "shot_id", "shot_type", "camera_movement", "visual_prompt",
+            "negative_prompt", "action_description", "duration_sec",
+            "difficulty", "keyframe_count", "candidate_count",
+            "motion_segments", "keyframe_specs", "characters_in_shot",
+        ) if k in shot_spec
+    }
+
+    user_prompt = (
+        "## 冻结美术资产\n"
+        f"{asset_summary}\n\n"
+        "## 镜头规格 (ShotSpec)\n"
+        f"{json.dumps(slim_shot, ensure_ascii=False, indent=2)}\n\n"
+        f"请为该镜头生成 {keyframe_count} 个关键帧 × {candidate_count} 个候选的详细生图 prompt。"
+    )
+
+    try:
+        resp = call_llm(
+            N10_PROMPT_MODEL,
+            _N10_KEYFRAME_PROMPT_SYSTEM,
+            user_prompt,
+            temperature=0.6,   # creative prompt writing
+            max_tokens=8192,
+            json_mode=True,
+            timeout=60.0,
+            max_retries=2,
+        )
+        llm_cost = resp.cost_cny
+        result = resp.parsed or {}
+        keyframes = result.get("keyframes", [])
+        if len(keyframes) < keyframe_count:
+            logger.warning(
+                "N10 Phase 1: LLM returned %d keyframes, expected %d for shot %s",
+                len(keyframes), keyframe_count, shot_id,
+            )
+            return None, llm_cost
+        logger.info(
+            "N10 Phase 1: Generated %d keyframes × %d candidates prompts for shot %s (llm_cost=%.4f¥)",
+            len(keyframes), candidate_count, shot_id, llm_cost,
+        )
+        return result, llm_cost
+    except LLMError as exc:
+        logger.warning("N10 Phase 1: LLM failed for shot %s: %s, falling back to basic prompts", shot_id, exc)
+        return None, 0.0
+
+
 def _generate_keyframes_for_shot(
     shot_spec: dict,
     frozen_assets: list[dict],
     art_plan: dict,
     state: PipelineState,
     comfyui_ok: bool,
-) -> tuple[dict, float]:
-    """Generate keyframe candidates for a single shot.
+) -> tuple[dict, float, float]:
+    """Generate keyframe candidates for a single shot (two-phase).
 
-    Returns (CandidateSet<ShotVisualCandidate> dict, total_gpu_seconds).
+    Phase 1 (LLM): Generate detailed per-keyframe per-candidate prompts
+      — calls _n10_generate_keyframe_prompts() for rich, context-aware prompts
+      — falls back to basic N02 keyframe_specs if LLM fails
+
+    Phase 2 (ComfyUI): Execute image generation with those prompts
+      — double-loop: keyframe_count × candidate_count
+      — each (keyframe_index, candidate_index) pair produces one image
+
+    Total images per shot = keyframe_count × candidate_count.
+    Returns (CandidateSet<ShotVisualCandidate> dict, total_gpu_seconds, llm_cost_cny).
     """
     shot_id = shot_spec.get("shot_id", "unknown")
     difficulty = shot_spec.get("difficulty", "S1")
     visual_prompt = shot_spec.get("visual_prompt", "")
     negative_prompt = shot_spec.get("negative_prompt", "")
-    candidate_count = CANDIDATE_COUNT_BY_DIFFICULTY.get(difficulty, 3)
+
+    # Two independent dimensions
+    keyframe_count = shot_spec.get("keyframe_count") or KEYFRAME_COUNT_BY_DIFFICULTY.get(difficulty, 1)
+    candidate_count = shot_spec.get("candidate_count") or CANDIDATE_COUNT_BY_DIFFICULTY.get(difficulty, 3)
 
     # Determine resolution based on aspect ratio
-    # Default to landscape for short drama
     resolution = KEYFRAME_RESOLUTION_LANDSCAPE
 
     controlnet_type = _select_controlnet(shot_spec)
     ref_images = _get_ref_images_for_shot(shot_spec, frozen_assets, comfyui_ok)
 
+    # ── Phase 1: LLM Prompt Generation ──────────────────────────────────
+    llm_result, llm_cost_cny = _n10_generate_keyframe_prompts(shot_spec, frozen_assets)
+
+    # Build prompt lookup: (kf_idx, cand_idx) → (prompt, neg_prompt)
+    # If LLM succeeded, use its detailed prompts; otherwise fall back to basic
+    prompt_lookup: dict[tuple[int, int], tuple[str, str]] = {}
+
+    if llm_result and llm_result.get("keyframes"):
+        for kf_data in llm_result["keyframes"]:
+            kf_idx = kf_data.get("keyframe_index", 0)
+            for cand_data in kf_data.get("candidates", []):
+                cand_idx = cand_data.get("candidate_index", 0)
+                prompt_lookup[(kf_idx, cand_idx)] = (
+                    cand_data.get("prompt", visual_prompt),
+                    cand_data.get("negative_prompt", negative_prompt),
+                )
+        prompt_source = "llm"
+    else:
+        prompt_source = "fallback"
+
+    # Fallback prompt builder for missing (kf_idx, cand_idx) pairs
+    def _fallback_prompt(kf_idx: int, cand_idx: int) -> tuple[str, str]:
+        """Build basic prompt from N02 keyframe_specs or visual_prompt."""
+        keyframe_specs = shot_spec.get("keyframe_specs", [])
+        if kf_idx < len(keyframe_specs) and keyframe_specs[kf_idx].get("prompt"):
+            base = keyframe_specs[kf_idx]["prompt"]
+        else:
+            base = visual_prompt
+        if cand_idx > 0:
+            base = f"{base}, variation {cand_idx}"
+        return base, negative_prompt
+
+    # ── Phase 2: ComfyUI Image Generation ───────────────────────────────
     set_id = f"cs_kf_{shot_id}_{uuid.uuid4().hex[:6]}"
     candidates: list[dict] = []
     set_gpu_seconds = 0.0
 
-    for i in range(candidate_count):
-        candidate_id = _make_candidate_id()
-        seed = _new_seed()
+    for kf_idx in range(keyframe_count):
+        timestamp_ratio = kf_idx / max(keyframe_count - 1, 1) if keyframe_count > 1 else 0.0
 
-        # Build keyframe-specific prompt
-        keyframe_specs = shot_spec.get("keyframe_specs", [])
-        kf_prompt = visual_prompt
-        if keyframe_specs:
-            kf0 = keyframe_specs[0]
-            if kf0.get("prompt"):
-                kf_prompt = kf0["prompt"]
+        for cand_idx in range(candidate_count):
+            candidate_id = _make_candidate_id()
+            seed = _new_seed()
+            variant_tag = f"kf{kf_idx}_v{cand_idx}"
 
-        variant_tag = f"kf_v{i}"
-        if i > 0:
-            # Add prompt variation for diversity
-            kf_prompt = f"{kf_prompt}, seed variation {i}"
+            # Get prompt for this (keyframe, candidate) pair
+            draw_prompt, draw_neg = prompt_lookup.get(
+                (kf_idx, cand_idx),
+                _fallback_prompt(kf_idx, cand_idx),
+            )
 
-        workflow = _build_flux_with_firered_workflow(
-            kf_prompt,
-            negative_prompt,
-            seed=seed,
-            ref_image_paths=ref_images,
-            width=resolution["width"],
-            height=resolution["height"],
-            controlnet_type=controlnet_type,
-        )
+            workflow = _build_flux_with_firered_workflow(
+                draw_prompt,
+                draw_neg,
+                seed=seed,
+                ref_image_paths=ref_images,
+                width=resolution["width"],
+                height=resolution["height"],
+                controlnet_type=controlnet_type,
+            )
 
-        image_ref = ""
-        gen_time = 0.0
+            image_ref = ""
+            gen_time = 0.0
 
-        if comfyui_ok:
-            try:
-                t_gen = time.monotonic()
-                prompt_id = submit_workflow(workflow)
-                job = poll_until_complete(prompt_id, timeout_s=N10_TIMEOUT)
-                gen_time = time.monotonic() - t_gen
+            if comfyui_ok:
+                try:
+                    t_gen = time.monotonic()
+                    prompt_id = submit_workflow(workflow)
+                    job = poll_until_complete(prompt_id, timeout_s=N10_TIMEOUT)
+                    gen_time = time.monotonic() - t_gen
 
-                if job.status == "completed":
-                    image_bytes = download_output_image(prompt_id, "7", 0)
-                    filename = f"shot_{shot_id}_{variant_tag}_{candidate_id}.png"
-                    image_ref = _safe_upload_bytes(state, "N10", image_bytes, filename, "image/png")
-                    set_gpu_seconds += gen_time
-                    logger.info("N10: Shot %s candidate %d generated (%.1fs)", shot_id, i, gen_time)
-                else:
-                    logger.warning("N10: ComfyUI job failed for shot %s candidate %d", shot_id, i)
-            except ComfyUIError as exc:
-                logger.error("N10: ComfyUI error for shot %s: %s", shot_id, exc)
-        else:
-            image_ref = f"stub://comfyui-offline/N10/{shot_id}/{candidate_id}.png"
+                    if job.status == "completed":
+                        image_bytes = download_output_image(prompt_id, "7", 0)
+                        filename = f"shot_{shot_id}_{variant_tag}_{candidate_id}.png"
+                        image_ref = _safe_upload_bytes(state, "N10", image_bytes, filename, "image/png")
+                        set_gpu_seconds += gen_time
+                        logger.info(
+                            "N10: Shot %s kf%d cand%d generated (%.1fs, prompt=%s)",
+                            shot_id, kf_idx, cand_idx, gen_time, prompt_source,
+                        )
+                    else:
+                        logger.warning(
+                            "N10: ComfyUI job failed for shot %s kf%d cand%d",
+                            shot_id, kf_idx, cand_idx,
+                        )
+                except ComfyUIError as exc:
+                    logger.error("N10: ComfyUI error for shot %s kf%d: %s", shot_id, kf_idx, exc)
+            else:
+                image_ref = f"stub://comfyui-offline/N10/{shot_id}/kf{kf_idx}_{candidate_id}.png"
 
-        candidates.append({
-            "candidate_id": candidate_id,
-            "version": 1,
-            "prompt_used": kf_prompt,
-            "prompt_variant_tag": variant_tag,
-            "model_used": "FLUX.2-Dev+FireRed" if ref_images else "FLUX.2-Dev",
-            "generation_params": {
-                "seed": seed,
-                "steps": 20,
-                "cfg": 3.5,
-                "resolution": resolution,
-                "controlnet": controlnet_type,
-                "firered_refs": len(ref_images),
-            },
-            "seed": seed,
-            "content": {
-                "keyframes": [{
-                    "keyframe_index": 0,
-                    "image": {"uri": image_ref, "provider": "tos" if image_ref.startswith("tos://") else "stub"},
-                    "seed": seed,
-                }],
-                "visual_prompt": kf_prompt,
-                "negative_prompt": negative_prompt,
+            candidates.append({
+                "candidate_id": candidate_id,
+                "version": 1,
+                "keyframe_index": kf_idx,
+                "candidate_index": cand_idx,
+                "timestamp_ratio": timestamp_ratio,
+                "prompt_used": draw_prompt,
+                "negative_prompt_used": draw_neg,
+                "prompt_source": prompt_source,
                 "prompt_variant_tag": variant_tag,
-            },
-            "auto_score": None,
-            "status": "pending",
-            "retention_policy": "temp_30d",
-            "generation_time_sec": gen_time,
-            "cost": _estimate_gpu_cost(gen_time),
-        })
+                "model_used": "FLUX.2-Dev+FireRed" if ref_images else "FLUX.2-Dev",
+                "generation_params": {
+                    "seed": seed,
+                    "steps": 20,
+                    "cfg": 3.5,
+                    "resolution": resolution,
+                    "controlnet": controlnet_type,
+                    "firered_refs": len(ref_images),
+                },
+                "seed": seed,
+                "content": {
+                    "keyframes": [{
+                        "keyframe_index": kf_idx,
+                        "timestamp_ratio": timestamp_ratio,
+                        "image": {"uri": image_ref, "provider": "tos" if image_ref.startswith("tos://") else "stub"},
+                        "seed": seed,
+                    }],
+                    "visual_prompt": draw_prompt,
+                    "negative_prompt": draw_neg,
+                    "prompt_variant_tag": variant_tag,
+                },
+                "auto_score": None,
+                "status": "pending",
+                "retention_policy": "temp_30d",
+                "generation_time_sec": gen_time,
+                "cost": _estimate_gpu_cost(gen_time),
+            })
+
+    total_requested = keyframe_count * candidate_count
+    total_real = len([
+        c for c in candidates
+        if "stub://" not in str(c["content"]["keyframes"][0]["image"].get("uri", ""))
+    ])
+
+    # Store LLM motion_script in candidate set for downstream N14
+    motion_script = ""
+    if llm_result:
+        motion_script = llm_result.get("motion_script", "")
 
     candidate_set = {
         "set_id": set_id,
         "target_type": "keyframe",
         "target_ref_id": shot_id,
+        "keyframe_count": keyframe_count,
+        "candidate_count_per_keyframe": candidate_count,
         "candidates": candidates,
-        "total_requested": candidate_count,
-        "total_generated": len([c for c in candidates if "stub://" not in str(c["content"]["keyframes"][0]["image"].get("uri", ""))]),
-        "prompt_diversity_strategy": "seed_variation",
+        "total_requested": total_requested,
+        "total_generated": total_real,
+        "prompt_source": prompt_source,
+        "prompt_diversity_strategy": "llm_per_candidate" if prompt_source == "llm" else "seed_variation",
+        "motion_script": motion_script,
         "decision_status": "awaiting_review",
         "regeneration_count": 0,
         "max_regenerations": 3,
     }
-    return candidate_set, set_gpu_seconds
+    return candidate_set, set_gpu_seconds, llm_cost_cny
 
 
 def handle_n10(node_id: str, state: PipelineState, config: dict[str, Any]) -> NodeResult:
@@ -1095,15 +1342,17 @@ def handle_n10(node_id: str, state: PipelineState, config: dict[str, Any]) -> No
     # Generate keyframes per shot
     candidate_sets: list[dict] = []
     total_gpu_seconds = 0.0
+    total_llm_cost = 0.0
 
     for shot in shots:
         if not isinstance(shot, dict):
             continue
-        cs, gpu_s = _generate_keyframes_for_shot(shot, frozen_assets, art_plan, state, comfyui_ok)
+        cs, gpu_s, llm_c = _generate_keyframes_for_shot(shot, frozen_assets, art_plan, state, comfyui_ok)
         candidate_sets.append(cs)
         total_gpu_seconds += gpu_s
+        total_llm_cost += llm_c
 
-    total_cost = _estimate_gpu_cost(total_gpu_seconds)
+    total_cost = _estimate_gpu_cost(total_gpu_seconds) + total_llm_cost
 
     payload = {
         "candidate_sets": candidate_sets,
@@ -1112,6 +1361,8 @@ def handle_n10(node_id: str, state: PipelineState, config: dict[str, Any]) -> No
         "comfyui_available": comfyui_ok,
         "model": "FLUX.2-Dev+FireRed",
         "total_gpu_seconds": total_gpu_seconds,
+        "total_llm_cost_cny": total_llm_cost,
+        "total_gpu_cost_cny": _estimate_gpu_cost(total_gpu_seconds),
         "total_cost_cny": total_cost,
     }
 
@@ -1144,16 +1395,21 @@ def handle_n10(node_id: str, state: PipelineState, config: dict[str, Any]) -> No
 def _route_video_model(shot_spec: dict) -> str:
     """Route to the best video model based on shot properties.
 
-    Returns model identifier string. For now, LTX-2.3 is default.
-    SkyReels for tracking/orbital camera, HuMo for S2 complex action.
+    Returns model identifier string. Routing factors:
+    - camera_movement: tracking/orbital/crane → SkyReels
+    - difficulty S2 + 4 keyframes → LTX-2.3+HuMo (complex motion)
+    - keyframe_count: 1kf → LTX-2.3 (single image start), 2/4kf → LTX-2.3 I2V
     """
     difficulty = shot_spec.get("difficulty", "S0")
     camera = shot_spec.get("camera_movement", "static")
+    kf_count = shot_spec.get("keyframe_count", 1)
 
     if camera in ("tracking", "orbital", "crane"):
         return "SkyReels"
-    if difficulty == "S2":
+    if difficulty == "S2" and kf_count >= 4:
         return "LTX-2.3+HuMo"
+    if kf_count >= 2:
+        return "LTX-2.3-I2V"
     return "LTX-2.3"
 
 
@@ -1177,6 +1433,14 @@ def _generate_video_for_shot(
 ) -> tuple[dict, float]:
     """Generate video candidates for a single shot using LTX-2.3.
 
+    Keyframe-count-aware:
+    - 1 keyframe: standard I2V (single start frame)
+    - 2 keyframes: I2V with start + end frame conditioning
+    - 4 keyframes: I2V with 4-keyframe temporal anchoring (full workflow)
+
+    The frozen_keyframe dict contains approved keyframes from N13:
+    - frozen_keyframe["approved_keyframes"]: list of {keyframe_index, image_uri, timestamp_ratio}
+
     Returns (CandidateSet<VideoCandidate> dict, total_gpu_seconds).
     """
     shot_id = shot_spec.get("shot_id", frozen_keyframe.get("shot_id", "unknown"))
@@ -1185,6 +1449,7 @@ def _generate_video_for_shot(
     visual_prompt = shot_spec.get("visual_prompt", "")
     negative_prompt = shot_spec.get("negative_prompt", "")
     candidate_count = CANDIDATE_COUNT_BY_DIFFICULTY.get(difficulty, 2)
+    keyframe_count = shot_spec.get("keyframe_count") or KEYFRAME_COUNT_BY_DIFFICULTY.get(difficulty, 1)
 
     model_name = _route_video_model(shot_spec)
     num_frames = _duration_to_frames(duration_sec)
@@ -1196,6 +1461,11 @@ def _generate_video_for_shot(
     ltx_width = 768
     ltx_height = 512
 
+    # Extract approved keyframe image URIs from frozen_keyframe
+    approved_kfs = frozen_keyframe.get("approved_keyframes", [])
+    # Sort by keyframe_index for deterministic ordering
+    approved_kfs = sorted(approved_kfs, key=lambda k: k.get("keyframe_index", 0))
+
     set_id = f"cs_vid_{shot_id}_{uuid.uuid4().hex[:6]}"
     candidates: list[dict] = []
     set_gpu_seconds = 0.0
@@ -1204,15 +1474,50 @@ def _generate_video_for_shot(
         candidate_id = _make_candidate_id()
         seed = _new_seed()
 
-        # Build video prompt — include shot action for motion guidance
+        # Build video prompt from approved keyframe descriptions + motion_script
         action_desc = shot_spec.get("action_description", "")
         camera_movement = shot_spec.get("camera_movement", "static")
-        video_prompt = visual_prompt
-        if action_desc:
-            video_prompt = f"{visual_prompt}. {action_desc}"
+
+        # Use the actual prompts from approved keyframes (generated by N10 Phase 1 LLM)
+        if keyframe_count > 1 and approved_kfs:
+            kf_desc_lines = []
+            for kf in approved_kfs:
+                kf_idx = kf.get("keyframe_index", 0)
+                t_ratio = kf.get("timestamp_ratio", 0)
+                t_sec = t_ratio * duration_sec
+                # Use the prompt that was actually used to generate the winning keyframe
+                kf_prompt = kf.get("prompt_used", "")
+                if not kf_prompt:
+                    kf_prompt = visual_prompt
+                kf_desc_lines.append(f"- keyframe_{kf_idx+1} ({t_sec:.1f}s): {kf_prompt}")
+
+            video_prompt = visual_prompt + "\n\nKeyframe sequence:\n" + "\n".join(kf_desc_lines)
+
+            # Use motion_script from N10 output if available, else build from segments
+            motion_script = frozen_keyframe.get("motion_script", "")
+            if not motion_script:
+                motion_segs = shot_spec.get("motion_segments", [])
+                motion_lines = []
+                for seg in motion_segs:
+                    s_sec = seg.get("start_ratio", 0) * duration_sec
+                    e_sec = seg.get("end_ratio", 1) * duration_sec
+                    motion_lines.append(
+                        f"{s_sec:.1f}s-{e_sec:.1f}s: {seg.get('description', '')}"
+                    )
+                motion_script = "\n".join(motion_lines)
+
+            if motion_script:
+                video_prompt += f"\n\nMotion script:\n{motion_script}"
+        else:
+            video_prompt = visual_prompt
+            if action_desc:
+                video_prompt = f"{visual_prompt}. {action_desc}"
+
         if camera_movement and camera_movement != "static":
             video_prompt = f"{video_prompt}. Camera: {camera_movement}"
 
+        # Build workflow based on keyframe_count
+        # (Actual ComfyUI workflow JSON selection will be implemented in W1-W5)
         workflow = _build_ltx_video_workflow(
             video_prompt,
             negative_prompt,
@@ -1241,8 +1546,8 @@ def _generate_video_for_shot(
                     actual_duration = num_frames / LTX_FPS
                     set_gpu_seconds += gen_time
                     logger.info(
-                        "N14: Shot %s video candidate %d generated (%.1fs, %d frames)",
-                        shot_id, i, gen_time, num_frames,
+                        "N14: Shot %s video candidate %d generated (%.1fs, %d frames, %dkf)",
+                        shot_id, i, gen_time, num_frames, keyframe_count,
                     )
                 else:
                     logger.warning("N14: ComfyUI job failed for shot %s candidate %d", shot_id, i)
@@ -1265,6 +1570,8 @@ def _generate_video_for_shot(
                 "resolution": {"width": ltx_width, "height": ltx_height},
                 "video_cfg": 3.0,
                 "audio_cfg": 7.0,
+                "keyframe_count": keyframe_count,
+                "keyframe_uris": [kf.get("image_uri", "") for kf in approved_kfs],
             },
             "seed": seed,
             "content": {
@@ -1275,6 +1582,7 @@ def _generate_video_for_shot(
                 "seed": seed,
                 "has_native_audio": True,  # LTX-AV generates audio
                 "motion_score": None,
+                "keyframe_count": keyframe_count,
             },
             "auto_score": None,
             "status": "pending",
@@ -1287,6 +1595,7 @@ def _generate_video_for_shot(
         "set_id": set_id,
         "target_type": "video",
         "target_ref_id": shot_id,
+        "keyframe_count": keyframe_count,
         "candidates": candidates,
         "total_requested": candidate_count,
         "total_generated": len([c for c in candidates if "stub://" not in str(c["content"]["video"].get("uri", ""))]),

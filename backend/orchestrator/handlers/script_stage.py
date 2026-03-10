@@ -410,6 +410,9 @@ _N02_SYSTEM_PROMPT = """\
 - 每集 target_duration_sec 必须被镜头时长之和覆盖（允许 ±10% 误差）
 - camera_movement 必须在支持列表内: static, pan_left, pan_right, tilt_up, tilt_down, dolly_in, dolly_out, tracking, crane_up, handheld, zoom_in, zoom_out, orbital, whip_pan
 - 每集需要前置 3-5s 高光镜头闪回再进入正片
+- motion_segments: 将镜头内的运动/动作按时间切分为 1-4 段，每段描述独立动作
+- keyframe_specs 的数量由下游 N05 根据难度分级决定（S0=1, S1=2, S2=4），N02 阶段先按默认 2 帧输出（timestamp_ratio 0.0 和 1.0），N05 会按需扩展
+- 每个 keyframe_spec.prompt 必须足够详细，可直接作为图像生成 prompt（包含人物外貌、姿态、表情、景别、光线、背景）
 
 输出 JSON Schema: EpisodeScript
 {
@@ -457,10 +460,16 @@ _N02_SYSTEM_PROMPT = """\
         "timing": {"start_sec": number, "end_sec": number}
       }],
       "duration_sec": number,
+      "motion_segments": [{
+        "segment_index": number,
+        "start_ratio": number,
+        "end_ratio": number,
+        "description": "string (English, describes the motion/action in this segment)"
+      }],
       "keyframe_specs": [{
         "keyframe_index": number,
         "timestamp_ratio": number,
-        "prompt": "string (English, composition description)",
+        "prompt": "string (English, detailed composition description for image generation — must include character appearance, pose, expression, camera angle, lighting, background)",
         "character_positions": [{"character_id": "string", "position": "string", "pose_description": "string", "expression": "string", "face_direction": "string"}],
         "retention_policy": "temp_30d"
       }]
@@ -691,6 +700,66 @@ def handle_n04(node_id: str, state: PipelineState, config: dict[str, Any]) -> No
     )
 
 
+# ── N05 constants & helpers ────────────────────────────────────────────────
+
+# Keyframe time-anchor count by difficulty (S0=1, S1=2, S2=4)
+KEYFRAME_COUNT_BY_DIFFICULTY = {"S0": 1, "S1": 2, "S2": 4}
+# Candidate draws per keyframe by difficulty (S0=2, S1=3, S2=4)
+N05_CANDIDATE_COUNT_BY_DIFFICULTY = {"S0": 2, "S1": 3, "S2": 4}
+
+
+def _n05_writeback_shots_db(graded_script: dict) -> None:
+    """Persist difficulty / keyframe_count / candidate_count to the shots table.
+
+    Best-effort: failures are logged but do not block the pipeline.
+    """
+    try:
+        from backend.common.db import execute
+    except ImportError:
+        logger.debug("_n05_writeback_shots_db: backend.common.db not available, skipping")
+        return
+
+    shots = [
+        shot
+        for scene in graded_script.get("scenes", [])
+        for shot in scene.get("shots", [])
+        if isinstance(shot, dict) and shot.get("shot_id")
+    ]
+    if not shots:
+        return
+
+    updated = 0
+    for shot in shots:
+        difficulty = shot.get("difficulty")
+        if not difficulty:
+            continue
+        kf_count = KEYFRAME_COUNT_BY_DIFFICULTY.get(difficulty, 1)
+        cand_count = N05_CANDIDATE_COUNT_BY_DIFFICULTY.get(difficulty, 2)
+
+        # Also inject into the graded_script payload for downstream consumption
+        shot["keyframe_count"] = kf_count
+        shot["candidate_count"] = cand_count
+
+        try:
+            execute(
+                """
+                UPDATE shots
+                SET difficulty = %s,
+                    keyframe_count = %s,
+                    candidate_count = %s,
+                    updated_at = now()
+                WHERE id::text = %s
+                """,
+                (difficulty, kf_count, cand_count, str(shot["shot_id"])),
+            )
+            updated += 1
+        except Exception as exc:
+            logger.debug("_n05_writeback_shots_db: failed for shot %s: %s", shot["shot_id"], exc)
+
+    if updated:
+        logger.info("N05 write-back: updated %d/%d shots in DB", updated, len(shots))
+
+
 # ── N05: Shot Leveling & Classification ───────────────────────────────────
 
 _N05_SYSTEM_PROMPT = """\
@@ -718,8 +787,14 @@ _N05_SYSTEM_PROMPT = """\
 - difficulty_reason: "string (简要说明)"
 - qc_tier: "tier_1_full" | "tier_2_dual" | "tier_3_single"
 - qc_tier_reason: "string (简要说明)"
-- keyframe_count: number (S0=2, S1/S2=4)
-- candidate_generation_config: {"num_candidates": number (S0=1-2, S1=2-3, S2=3-4)}"""
+- keyframe_count: number — 关键帧时间锚点数，按难度分配:
+    S0=1 (单帧，静态镜头)
+    S1=2 (首尾两帧，标准运动)
+    S2=4 (四帧，复杂多段运动)
+- candidate_count: number — 每个关键帧的抽卡数（候选变体数），按难度分配:
+    S0=2, S1=3, S2=4
+  注意: keyframe_count 和 candidate_count 是两个独立维度。
+  总生成数 = keyframe_count × candidate_count"""
 
 
 def handle_n05(node_id: str, state: PipelineState, config: dict[str, Any]) -> NodeResult:
@@ -775,6 +850,9 @@ def handle_n05(node_id: str, state: PipelineState, config: dict[str, Any]) -> No
     graded_script["_frozen"] = True
     graded_script["_graded"] = True
     graded_script["_graded_at"] = _iso_now()
+
+    # Write-back: persist difficulty/keyframe_count/candidate_count to shots DB
+    _n05_writeback_shots_db(graded_script)
 
     output_ref = _safe_upload(state, node_id, graded_script)
     duration = time.monotonic() - t0

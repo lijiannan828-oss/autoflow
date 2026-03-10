@@ -150,21 +150,34 @@ Visual Director 在 N06：
 → 产出"全集作战计划"，后续执行节点按计划行事。
 ```
 
-### 第二层：镜头级微调执行（轻思考，规则+记忆，零LLM）
+### 第二层：镜头级执行（N10 两阶段 + N14 纯执行）
 
-发生在N10（关键帧生成）和N14（视频生成）。每个镜头按N06预制配方执行，仅做轻量微调。
+发生在N10（关键帧生成）和N14（视频生成）。
 
 ```
-Visual Director 在 N10/N14 按shot批量执行时，每个shot做：
-  ① 读取N06预制的生成配方（prompt+workflow+参数）
-  ② 记忆快查：该角色有没有历史最佳参数？（纯DB查询，零LLM）
-  ③ 预算快查：剩余预算够不够？（纯计算）
-  ④ 微调参数：ip_adapter按记忆覆盖、seed按前一镜偏移
-  ⑤ 提交ComfyUI执行
-  ⑥ 自检（FaceID/构图/物理，纯推理评分，零LLM）
-  ⑦ 不过→微调参数重试（最多2次），不重新策划
+Visual Director 在 N10 按shot批量执行时，每个shot做：
 
-→ 每个shot耗时以秒计，不等待LLM响应。
+  Phase 1 — LLM Prompt 编排（1次LLM/shot）：
+  ① 读取 ShotSpec（keyframe_count/candidate_count/motion_segments）
+  ② 读取 FrozenArtAsset（角色外貌/服装/场景描述）
+  ③ 调用 LLM 为每个关键帧×每个候选生成独立的详细生图 prompt
+     - 同帧不同候选: 核心构图一致，光影/微表情/色温做微妙变化（真正的"抽卡"）
+     - 不同帧之间: 角色/服装/场景连续，动作按时间线发展
+  ④ 同时生成 motion_script（帧间运动描述），供 N14 使用
+
+  Phase 2 — ComfyUI 执行生图（零LLM）：
+  ⑤ 获取角色参考图（FireRed 锚点）
+  ⑥ 双循环: keyframe_count × candidate_count，逐个提交 ComfyUI
+  ⑦ 自检（FaceID/构图/物理，纯推理评分，零LLM）
+  ⑧ 不过→微调参数重试（最多2次），不重新策划
+
+Visual Director 在 N14 按shot批量执行时，每个shot做：
+  ① 读取 N10 的 motion_script + 审核通过的关键帧 prompt
+  ② 组装视频 prompt（keyframe sequence + motion_script）
+  ③ 提交 ComfyUI 执行（LTX-2.3），零LLM
+
+→ N10 Phase 1 约 2-5s/shot (LLM)，Phase 2 约 10-30s/shot (GPU)。
+  N14 纯 GPU 执行，无 LLM 等待。
 ```
 
 ### 第三层：批后复盘（中等思考，Stage完成后1次LLM）
@@ -817,7 +830,7 @@ Step 6: 人确认后全量替换，旧版归档
 
 | 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
 |:---:|------|------|------|------|:---:|:---:|---------|
-| **N10** | 关键帧生成 | ShotSpec + FrozenArtAsset + ArtPlan | CandidateSet\<ShotVisualCandidate\> | FLUX.2 Dev + FireRed (ComfyUI) | S0→1-2/S1→2-3/S2→3-4 | ✗ | per shot并行；ControlNet按shot_type自动选；2K分辨率 |
+| **N10** | 关键帧生成 | ShotSpec + FrozenArtAsset + ArtPlan | CandidateSet\<ShotVisualCandidate\> | FLUX.2 Dev + FireRed (ComfyUI) | S0:1kf×2=2 / S1:2kf×3=6 / S2:4kf×4=16 | ✗ | per shot并行；双循环: keyframe_count(时间锚点1/2/4) × candidate_count(抽卡数2/3/4)；ControlNet按shot_type自动选；2K分辨率 |
 | **N11** | 关键帧质检 | 候选关键帧 + FrozenArtAsset参考 | QualityScore + 选定最佳候选 | 按qc_tier动态选模型数 + ReActor/FaceID | — | ✗ | 加权总分<7.5打回N10(max 3)；自动选最高分 |
 | **N12** | 跨镜头连续性检查 | 全集选定关键帧（按序） | ContinuityReport | Gemini 3.1 (多模态) | — | ✗ | 多图理解分析角色一致/场景切换/节奏 |
 | **N13** | 关键帧定稿 | 选定关键帧 + ContinuityReport | FrozenKeyframe[] | FireRed Edit(条件调用) | — | ✗ | 无issue→直接固化；有issue→FireRed微调 |
@@ -826,7 +839,7 @@ Step 6: 人确认后全量替换，旧版归档
 
 | 节点 | 名称 | 输入 | 输出 | 模型 | 候选 | 人审 | 关键说明 |
 |:---:|------|------|------|------|:---:|:---:|---------|
-| **N14** | 视频素材生成 | FrozenKeyframe + ShotSpec + FrozenAssets | CandidateSet\<VideoCandidate\> | LTX-2.3 (默认) + HuMo(S2条件) | S0→1-2/S1→2-3/S2→3-4 | ✗ | 1080p；生成略长+0.5~1s |
+| **N14** | 视频素材生成 | FrozenKeyframe + ShotSpec + FrozenAssets | CandidateSet\<VideoCandidate\> | LTX-2.3 (默认) + LTX-I2V(2/4kf) + HuMo(S2+4kf) | S0:2 / S1:3 / S2:4 视频候选 | ✗ | 1080p；按keyframe_count选工作流(1kf/2kf/4kf)；生成略长+0.5~1s |
 | **N15** | 视频质检 | VideoCandidate[] + 参考资产 | QualityScore + 选定候选 | 按qc_tier + ReActor/Physics | — | ✗ | 加权<7.5打回；单维度<5直接打回 |
 | **N16** | 剧情节奏连续性 | 全集选定视频（按序） | PacingReport | Gemini 3.1 (多模态) | — | ✗ | 节奏分析+剪辑建议+时长偏差 |
 | **N16b** | 影调与节奏调整 | FrozenVideo[] + PacingReport + EpisodeScript | 调整后的视频序列 + 更新的时间轴 | FFmpeg(剪辑) + Gemini 3.1(决策) | — | ✗ | 调整镜头长短/影调一致化/转场；与TTS同阶段 |

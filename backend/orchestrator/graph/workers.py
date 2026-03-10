@@ -71,7 +71,7 @@ NODE_DECISION_LAYER: dict[str, "DecisionMode"] = {
     "N05": "shot",     # ShotDesigner: shot refinement
     "N07": "shot",     # VisualDirector: art generation
     "N09": "shot",     # VisualDirector: keyframe optimization
-    "N10": "shot",     # VisualDirector: keyframe generation
+    "N10": "shot",     # VisualDirector: keyframe gen (Phase1: LLM prompt编排 + Phase2: ComfyUI)
     "N13": "shot",     # VisualDirector: video preprocessing
     "N14": "shot",     # VisualDirector: video generation
     "N16b": "shot",    # ShotDesigner: tone/pacing adjustment

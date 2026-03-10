@@ -231,7 +231,7 @@
 | O8 | **开源模型下载到 GPU 节点** | FLUX.2 + LTX-2.3（优先）→ FireRed → CosyVoice → ACE-Step 1.5 → HunyuanFoley，全部 sha256 校验 | 4h | O7 | O9 |
 | O9 | **ComfyUI workflow 基线验证** | txt2img workflow（FLUX.2）1 张图 + img2vid workflow（LTX-2.3）1 段视频 → 确认 ComfyUI API 可调 | 1h | O8 | O9a-O9d |
 | O9a | **🔬 FLUX.2 调试 — N07 美术图真实 GPU 验证** | 用 N07 handler 真实调用 ComfyUI FLUX.2 → 验证输出图质量/分辨率/延迟 → 记录基线指标（耗时/VRAM/cost_cny） | 1.5h | O9 + R4 | V22-INT.9 |
-| O9b | **🔬 FLUX+FireRed 调试 — N10 关键帧真实 GPU 验证** | 用 N10 handler 真实调用 FLUX.2+FireRed → 角色一致性参考图注入 → 验证多参考输出质量 | 1.5h | O9 + R4 | V22-INT.9 |
+| O9b | **🔬 N10 关键帧两阶段真实验证** | Phase1: 验证 LLM 为每帧×每候选生成 diverse prompt 质量; Phase2: 用 FLUX.2+FireRed 真实调用 ComfyUI → 角色一致性参考图注入 → 验证多参考输出质量 | 1.5h | O9 + R4 | V22-INT.9 |
 | O9c | **🔬 LTX-2.3 调试 — N14 视频真实 GPU 验证** | 用 N14 handler 真实调用 LTX-2.3 → 验证 2s 视频输出质量/分辨率/帧率 → 记录 VRAM 峰值 | 1.5h | O9 | V22-INT.9 |
 | O9d | **🔬 CosyVoice 调试 — N07b 音色真实 GPU 验证** | CosyVoice 模型加载 + 推理 → 验证音色候选质量/延迟 → 与 N07b handler 对接 | 1h | O9 + R4 | V22-INT.9 |
 | O10 | **全服务连通性验证** | PG / Redis / TOS / Qdrant / RocketMQ / ComfyUI 全部从 VKE Pod 内可达 → 生成连通性报告 | 1.5h | O5+O6+O9 | M15b |
