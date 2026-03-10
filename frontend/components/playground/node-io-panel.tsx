@@ -274,7 +274,7 @@ export function NodeIOPanel({
                     />
                   )}
                 </div>
-              </ScrollArea>
+              </div>
             ) : (
               <IOContentPanel 
                 type="output" 
