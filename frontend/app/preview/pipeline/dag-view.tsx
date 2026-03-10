@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import {
   ReactFlow,
   Background,
@@ -11,13 +11,14 @@ import {
   type NodeTypes,
   Position,
   MarkerType,
+  Handle,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { cn } from "@/lib/utils"
 import type { TraceNode, TraceEdge, StageInfo, NodeStatus, DecisionLevel } from "./mock-data"
 import { 
-  CheckCircle2, Play, Clock, XCircle, User, RotateCcw, Pause,
-  Brain, Cpu, Shield, Layers, FileText, Volume2
+  CheckCircle2, Play, Clock, XCircle, User, RotateCcw,
+  Brain, Cpu, Shield, Layers, FileText
 } from "lucide-react"
 
 interface DagViewProps {
@@ -57,19 +58,20 @@ function PipelineNodeComponent({ data }: { data: TraceNode & { selected: boolean
   const levelCfg = levelConfig[data.decision_level]
   const LevelIcon = levelCfg.icon
 
-  const isGate = data.is_gate
-  const width = isGate ? 200 : 160
-
   return (
     <div 
       className={cn(
-        "rounded-lg border-2 backdrop-blur-sm transition-all duration-200 cursor-pointer overflow-hidden",
+        "rounded-lg border-2 backdrop-blur-sm transition-all duration-200 cursor-pointer overflow-hidden relative",
         config.bg,
         config.border,
-        data.selected && "ring-2 ring-primary ring-offset-2 ring-offset-background scale-105"
+        data.selected && "ring-2 ring-primary ring-offset-2 ring-offset-background scale-105 shadow-lg shadow-primary/20"
       )}
-      style={{ width }}
+      style={{ width: 180, minHeight: 90 }}
     >
+      {/* 连接点 */}
+      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-border !border-none" />
+      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-border !border-none" />
+
       {/* Header */}
       <div className="px-3 py-2 border-b border-white/5">
         <div className="flex items-center justify-between mb-1">
@@ -80,9 +82,6 @@ function PipelineNodeComponent({ data }: { data: TraceNode & { selected: boolean
           </div>
         </div>
         <p className="text-xs font-medium text-foreground/90 truncate">{data.node_name}</p>
-        <p className="text-[10px] text-muted-foreground truncate">
-          {data.agent_name.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
-        </p>
       </div>
 
       {/* Metrics */}
@@ -90,34 +89,27 @@ function PipelineNodeComponent({ data }: { data: TraceNode & { selected: boolean
         <div className="flex items-center gap-1">
           {data.status === "running" && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
           <span className={cn(
-            data.status === "completed" ? "text-emerald-400" :
+            data.status === "completed" || data.status === "gate_approved" ? "text-emerald-400" :
             data.status === "running" ? "text-blue-400" :
-            data.status === "failed" ? "text-red-400" :
+            data.status === "failed" || data.status === "gate_rejected" ? "text-red-400" :
             "text-muted-foreground"
           )}>
             {data.status === "completed" ? "完成" :
              data.status === "running" ? "运行中" :
              data.status === "failed" ? "失败" :
-             data.status === "gate_waiting" ? "等待审核" :
-             data.status === "gate_approved" ? "已通过" :
-             data.status === "gate_rejected" ? "已打回" :
+             data.status === "gate_waiting" ? "待审" :
+             data.status === "gate_approved" ? "通过" :
+             data.status === "gate_rejected" ? "打回" :
              "等待"}
           </span>
         </div>
-        {data.duration_seconds != null && (
-          <span className="text-muted-foreground">{formatDuration(data.duration_seconds)}</span>
-        )}
-      </div>
-
-      {/* Cost & Quality */}
-      {(data.cost_cny > 0 || data.quality_score != null) && (
-        <div className="px-3 pb-2 flex items-center justify-between text-[10px]">
+        <div className="flex items-center gap-2">
           {data.cost_cny > 0 && (
             <span className="text-emerald-400/80">¥{data.cost_cny.toFixed(2)}</span>
           )}
           {data.quality_score != null && (
             <span className={cn(
-              "px-1.5 py-0.5 rounded",
+              "px-1.5 py-0.5 rounded text-[9px]",
               data.quality_score >= 8.5 ? "bg-emerald-500/20 text-emerald-300" :
               data.quality_score >= 7.5 ? "bg-blue-500/20 text-blue-300" :
               "bg-amber-500/20 text-amber-300"
@@ -126,30 +118,18 @@ function PipelineNodeComponent({ data }: { data: TraceNode & { selected: boolean
             </span>
           )}
         </div>
-      )}
-
-      {/* Gate specific */}
-      {isGate && data.gate_feedback && (
-        <div className="px-3 pb-2">
-          <p className="text-[10px] text-muted-foreground truncate italic">
-            &ldquo;{data.gate_feedback.slice(0, 30)}...&rdquo;
-          </p>
-        </div>
-      )}
+      </div>
 
       {/* Batch stats for execution nodes */}
       {data.batch_stats && (
         <div className="px-3 pb-2 flex items-center gap-2 text-[10px]">
-          <span className="text-emerald-400">{data.batch_stats.completed}/{data.batch_stats.total_shots}</span>
-          {data.batch_stats.running > 0 && (
-            <span className="text-blue-400 flex items-center gap-0.5">
-              <div className="w-1 h-1 rounded-full bg-blue-400 animate-pulse" />
-              {data.batch_stats.running}
-            </span>
-          )}
-          {data.batch_stats.retried > 0 && (
-            <span className="text-amber-400">↻{data.batch_stats.retried}</span>
-          )}
+          <div className="flex-1 h-1.5 bg-secondary/50 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-emerald-500/60 rounded-full transition-all duration-500"
+              style={{ width: `${(data.batch_stats.completed / data.batch_stats.total_shots) * 100}%` }}
+            />
+          </div>
+          <span className="text-muted-foreground">{data.batch_stats.completed}/{data.batch_stats.total_shots}</span>
         </div>
       )}
     </div>
@@ -161,130 +141,118 @@ const nodeTypes: NodeTypes = {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 布局计算
+// 布局计算 - 水平流式布局
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const NODE_W = 160
+const NODE_W = 180
 const NODE_H = 100
-const GATE_W = 200
-const GAP_X = 50
-const GAP_Y = 40
-const STAGE_LABEL_W = 120
+const GAP_X = 80  // 增加水平间距
+const GAP_Y = 60  // 增加垂直间距
+const STAGE_GAP = 100 // Stage 之间的额外间距
+const PARALLEL_OFFSET_Y = 120 // 并行节点的垂直偏移
 
 export function DagView({ nodes, edges, stages, selectedNodeId, onNodeSelect }: DagViewProps) {
   const { rfNodes, rfEdges } = useMemo(() => {
     const nodeMap = new Map(nodes.map(n => [n.node_id, n]))
     const rfNodes: Node[] = []
-    let y = 20
+    const nodePositions = new Map<string, { x: number; y: number }>()
+    
+    let x = 40
+    const baseY = 200
 
+    // 遍历所有 stage 计算节点位置
     for (const stage of stages) {
-      // Stage label
-      rfNodes.push({
-        id: `stage-${stage.stage}`,
-        type: "default",
-        position: { x: 0, y: y + NODE_H / 2 - 12 },
-        data: { label: `Stage ${stage.stage}` },
-        style: {
-          background: "transparent",
-          border: "none",
-          color: "hsl(var(--muted-foreground))",
-          fontSize: 10,
-          fontWeight: 600,
-          width: STAGE_LABEL_W - 20,
-          padding: 0,
-          textAlign: "right" as const,
-        },
-        draggable: false,
-        selectable: false,
-      })
-
-      // Stage label subtitle
+      // Stage 标签
       rfNodes.push({
         id: `stage-label-${stage.stage}`,
         type: "default",
-        position: { x: 0, y: y + NODE_H / 2 + 4 },
-        data: { label: stage.label },
+        position: { x, y: 40 },
+        data: { label: `Stage ${stage.stage}: ${stage.label}` },
         style: {
-          background: "transparent",
-          border: "none",
+          background: "hsl(var(--secondary) / 0.3)",
+          border: "1px solid hsl(var(--border) / 0.3)",
           color: "hsl(var(--muted-foreground))",
-          fontSize: 9,
-          fontWeight: 400,
-          width: STAGE_LABEL_W - 20,
-          padding: 0,
-          textAlign: "right" as const,
-          opacity: 0.7,
+          fontSize: 11,
+          fontWeight: 500,
+          padding: "4px 12px",
+          borderRadius: 6,
         },
         draggable: false,
         selectable: false,
       })
 
-      let x = STAGE_LABEL_W
-      const hasParallel = stage.nodes.includes("N07b")
-      let parallelOffset = 0
-
+      // 计算 stage 内节点
       for (const nodeId of stage.nodes) {
         const node = nodeMap.get(nodeId)
         if (!node) continue
 
-        const isGate = node.is_gate
-        const w = isGate ? GATE_W : NODE_W
-
-        // Handle N07b parallel positioning
+        // 处理并行节点 (N07b 与 N07 并行)
         if (nodeId === "N07b") {
-          const n07Node = rfNodes.find(n => n.id === "N07")
-          if (n07Node) {
+          const n07Pos = nodePositions.get("N07")
+          if (n07Pos) {
+            const pos = { x: n07Pos.x, y: n07Pos.y + PARALLEL_OFFSET_Y }
+            nodePositions.set(nodeId, pos)
             rfNodes.push({
               id: nodeId,
               type: "pipeline",
-              position: { x: n07Node.position.x, y: y + NODE_H + GAP_Y * 0.6 },
+              position: pos,
               data: { ...node, selected: selectedNodeId === nodeId },
-              sourcePosition: Position.Right,
-              targetPosition: Position.Left,
             })
-            parallelOffset = NODE_H + GAP_Y * 0.6
             continue
           }
         }
 
+        const pos = { x, y: baseY }
+        nodePositions.set(nodeId, pos)
+        
         rfNodes.push({
           id: nodeId,
           type: "pipeline",
-          position: { x, y },
+          position: pos,
           data: { ...node, selected: selectedNodeId === nodeId },
-          sourcePosition: Position.Right,
-          targetPosition: Position.Left,
         })
 
-        x += w + GAP_X
+        x += NODE_W + GAP_X
       }
 
-      y += NODE_H + GAP_Y + (hasParallel ? parallelOffset : 0)
+      // Stage 结束后增加额外间距
+      x += STAGE_GAP - GAP_X
     }
 
-    // Build edges
+    // 构建边
     const rfEdges: Edge[] = edges.map((e, i) => {
       const fromNode = nodeMap.get(e.from)
+      const toNode = nodeMap.get(e.to)
       const isCompleted = fromNode?.status === "completed" || fromNode?.status === "gate_approved"
       const isRunning = fromNode?.status === "running"
+      const isParallel = e.type === "parallel"
+      const isReturn = e.type === "return"
+
+      // 判断是否需要弯曲的边（跨行）
+      const fromPos = nodePositions.get(e.from)
+      const toPos = nodePositions.get(e.to)
+      const needsCurve = fromPos && toPos && Math.abs(fromPos.y - toPos.y) > 50
 
       return {
-        id: `e-${i}`,
+        id: `e-${e.from}-${e.to}`,
         source: e.from,
         target: e.to,
-        type: "default",
+        type: needsCurve ? "smoothstep" : "default",
         animated: isRunning,
         style: {
-          stroke: isCompleted ? "#10B981" : isRunning ? "#3B82F6" : e.type === "return" ? "#F59E0B" : "#374151",
-          strokeWidth: 2,
-          strokeDasharray: e.type === "return" ? "5,5" : e.type === "parallel" ? "3,3" : undefined,
+          stroke: isCompleted ? "#10B981" : isRunning ? "#3B82F6" : isReturn ? "#F59E0B" : "#52525b",
+          strokeWidth: isRunning ? 2.5 : 2,
+          strokeDasharray: isReturn ? "8,4" : isParallel ? "4,4" : undefined,
         },
         markerEnd: { 
           type: MarkerType.ArrowClosed, 
-          width: 14, 
-          height: 14, 
-          color: isCompleted ? "#10B981" : isRunning ? "#3B82F6" : "#374151" 
+          width: 16, 
+          height: 16, 
+          color: isCompleted ? "#10B981" : isRunning ? "#3B82F6" : isReturn ? "#F59E0B" : "#52525b",
         },
+        label: isParallel ? "并行" : undefined,
+        labelStyle: { fontSize: 9, fill: "#71717a" },
+        labelBgStyle: { fill: "hsl(var(--background))", fillOpacity: 0.8 },
       }
     })
 
@@ -297,25 +265,25 @@ export function DagView({ nodes, edges, stages, selectedNodeId, onNodeSelect }: 
   }, [onNodeSelect])
 
   return (
-    <div className="w-full h-full bg-gradient-to-br from-background via-background to-secondary/20">
+    <div className="w-full h-full bg-gradient-to-br from-background via-background to-secondary/10">
       <ReactFlow
         nodes={rfNodes}
         edges={rfEdges}
         nodeTypes={nodeTypes}
         onNodeClick={onNodeClick}
         fitView
-        fitViewOptions={{ padding: 0.12 }}
+        fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
         proOptions={{ hideAttribution: true }}
         nodesDraggable={false}
         nodesConnectable={false}
-        minZoom={0.25}
+        minZoom={0.2}
         maxZoom={1.5}
         defaultEdgeOptions={{ type: "default" }}
       >
-        <Background color="hsl(var(--border))" gap={40} size={1} />
+        <Background color="hsl(var(--border) / 0.3)" gap={50} size={1} />
         <Controls
           showInteractive={false}
-          className="!bg-card/80 !backdrop-blur !border-border/50 !shadow-xl [&>button]:!bg-card [&>button]:!border-border/50 [&>button]:!text-foreground [&>button:hover]:!bg-secondary"
+          className="!bg-card/90 !backdrop-blur !border-border/50 !shadow-xl [&>button]:!bg-card [&>button]:!border-border/50 [&>button]:!text-foreground [&>button:hover]:!bg-secondary"
         />
         <MiniMap
           nodeColor={(node) => {
@@ -323,21 +291,14 @@ export function DagView({ nodes, edges, stages, selectedNodeId, onNodeSelect }: 
             if (!data?.status) return "#374151"
             return data.status === "completed" || data.status === "gate_approved" ? "#10B981" :
                    data.status === "running" ? "#3B82F6" :
-                   data.status === "failed" ? "#EF4444" : "#374151"
+                   data.status === "failed" ? "#EF4444" : "#52525b"
           }}
-          maskColor="rgba(0,0,0,0.8)"
-          className="!bg-card/80 !border-border/50"
+          maskColor="rgba(0,0,0,0.85)"
+          className="!bg-card/90 !border-border/50"
+          pannable
+          zoomable
         />
       </ReactFlow>
     </div>
   )
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const min = Math.floor(seconds / 60)
-  const sec = Math.round(seconds % 60)
-  if (min < 60) return `${min}m${sec}s`
-  const hr = Math.floor(min / 60)
-  return `${hr}h${min % 60}m`
 }

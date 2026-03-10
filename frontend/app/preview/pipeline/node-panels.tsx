@@ -6,8 +6,8 @@ import { MOCK_N02_PLANNING, MOCK_N14_EXECUTION, MOCK_N11_QC, MOCK_N12_REVIEW } f
 import { 
   Clock, DollarSign, Cpu, Zap, ChevronDown, ChevronUp, X,
   Brain, ListChecks, AlertTriangle, CheckCircle2, XCircle, RefreshCw,
-  Database, Lightbulb, TrendingUp, Eye, MessageSquare, BarChart3,
-  Play, Pause, RotateCcw, ArrowRight, FileText, Layers
+  Database, Lightbulb, Image, Video, Music, FileText, Layers,
+  Play, ImageIcon
 } from "lucide-react"
 import { useState } from "react"
 
@@ -18,127 +18,297 @@ interface NodeDetailPanelProps {
 
 const LEVEL_CONFIG: Record<DecisionLevel, { label: string; color: string; bgColor: string; tabs: string[] }> = {
   planning: { 
-    label: "集级策划", 
+    label: "Planning", 
     color: "text-violet-300", 
     bgColor: "bg-violet-500/15 border-violet-500/30",
-    tabs: ["五步决策链", "输入/输出", "遥测"] 
+    tabs: ["Decision Chain", "Output", "Telemetry"] 
   },
   execution: { 
-    label: "批量执行", 
+    label: "Execution", 
     color: "text-blue-300", 
     bgColor: "bg-blue-500/15 border-blue-500/30",
-    tabs: ["执行总览", "逐镜头详情", "遥测"] 
+    tabs: ["Overview", "Shot Details", "Output", "Telemetry"] 
   },
   review: { 
-    label: "质检/复盘", 
+    label: "QC/Review", 
     color: "text-amber-300", 
     bgColor: "bg-amber-500/15 border-amber-500/30",
-    tabs: ["检查报告", "维度分析", "遥测"] 
+    tabs: ["Report", "Dimensions", "Output", "Telemetry"] 
   },
   gate: { 
-    label: "人工审核", 
+    label: "Gate", 
     color: "text-pink-300", 
     bgColor: "bg-pink-500/15 border-pink-500/30",
-    tabs: ["审核记录", "遥测"] 
+    tabs: ["Review Record", "Output", "Telemetry"] 
   },
   freeze: { 
-    label: "定稿操作", 
+    label: "Freeze", 
     color: "text-zinc-300", 
     bgColor: "bg-zinc-500/15 border-zinc-500/30",
-    tabs: ["定稿记录", "遥测"] 
+    tabs: ["Freeze Record", "Output", "Telemetry"] 
   },
   compose: { 
-    label: "合成/分发", 
+    label: "Compose", 
     color: "text-cyan-300", 
     bgColor: "bg-cyan-500/15 border-cyan-500/30",
-    tabs: ["概览", "输入/输出", "遥测"] 
+    tabs: ["Overview", "Output", "Telemetry"] 
   },
 }
 
 export function NodeDetailPanel({ node, onClose }: NodeDetailPanelProps) {
   const config = LEVEL_CONFIG[node.decision_level]
   const [activeTab, setActiveTab] = useState(0)
-  const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className={cn(
-      "border-t border-border/50 bg-card/95 backdrop-blur-xl transition-all duration-300",
-      collapsed ? "h-12" : "min-h-[320px] max-h-[60vh]"
-    )}>
-      {/* Header bar */}
-      <div 
-        className="h-12 px-5 flex items-center justify-between border-b border-border/30 cursor-pointer hover:bg-secondary/30 transition-colors" 
-        onClick={() => setCollapsed(v => !v)}
-      >
-        <div className="flex items-center gap-4">
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="shrink-0 px-4 py-3 border-b border-border/30 bg-secondary/20">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-bold text-primary">{node.node_id}</span>
-            <span className="text-sm font-medium text-foreground">{node.node_name}</span>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {node.agent_name.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
-          </span>
-          <span className={cn("text-[10px] px-2.5 py-1 rounded-full border font-medium", config.bgColor, config.color)}>
-            {config.label}
-          </span>
-          {node.model && (
-            <span className="text-[10px] text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded">
-              {node.model}
+            <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-medium", config.bgColor, config.color)}>
+              {config.label}
             </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
+          </div>
           <button 
-            onClick={e => { e.stopPropagation(); onClose() }} 
-            className="p-1.5 rounded-md hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"
+            onClick={onClose} 
+            className="p-1 rounded-md hover:bg-secondary/50 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
-          {collapsed ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
         </div>
+        <h3 className="text-sm font-semibold text-foreground mb-1">{node.node_name}</h3>
+        <p className="text-[10px] text-muted-foreground">
+          Agent: {node.agent_name.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}
+          {node.model && ` | Model: ${node.model}`}
+        </p>
       </div>
 
-      {!collapsed && (
-        <>
-          {/* Tabs */}
-          <div className="h-10 px-5 flex items-center gap-1 border-b border-border/20 bg-secondary/20">
-            {config.tabs.map((tab, i) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(i)}
-                className={cn(
-                  "px-4 py-1.5 text-xs font-medium rounded-md transition-all",
-                  i === activeTab 
-                    ? "bg-primary/20 text-primary border border-primary/30" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                )}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+      {/* Tabs */}
+      <div className="shrink-0 px-4 py-2 flex items-center gap-1 border-b border-border/20 bg-secondary/10 overflow-x-auto">
+        {config.tabs.map((tab, i) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(i)}
+            className={cn(
+              "px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap",
+              i === activeTab 
+                ? "bg-primary/20 text-primary border border-primary/30" 
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
-          {/* Tab content */}
-          <div className="p-5 overflow-auto" style={{ maxHeight: "calc(60vh - 90px)" }}>
-            {renderTabContent(node, config.tabs[activeTab])}
-          </div>
-        </>
-      )}
+      {/* Tab content */}
+      <div className="flex-1 overflow-auto p-4">
+        {renderTabContent(node, config.tabs[activeTab])}
+      </div>
     </div>
   )
 }
 
 function renderTabContent(node: TraceNode, tab: string) {
-  if (tab === "遥测") return <TelemetryTab node={node} />
-  if (tab === "五步决策链") return <PlanningDecisionChain node={node} />
-  if (tab === "执行总览") return <ExecutionOverview node={node} />
-  if (tab === "逐镜头详情") return <ShotDetailsTab node={node} />
-  if (tab === "检查报告") return <ReviewReportTab node={node} />
-  if (tab === "维度分析") return <DimensionAnalysisTab node={node} />
-  if (tab === "审核记录") return <GateRecordTab node={node} />
-  if (tab === "定稿记录") return <FreezeRecordTab node={node} />
-  if (tab === "概览") return <ComposeOverviewTab node={node} />
+  if (tab === "Telemetry") return <TelemetryTab node={node} />
+  if (tab === "Output") return <OutputTab node={node} />
+  if (tab === "Decision Chain") return <PlanningDecisionChain node={node} />
+  if (tab === "Overview") return node.decision_level === "execution" ? <ExecutionOverview node={node} /> : <ComposeOverviewTab node={node} />
+  if (tab === "Shot Details") return <ShotDetailsTab node={node} />
+  if (tab === "Report") return <ReviewReportTab node={node} />
+  if (tab === "Dimensions") return <DimensionAnalysisTab node={node} />
+  if (tab === "Review Record") return <GateRecordTab node={node} />
+  if (tab === "Freeze Record") return <FreezeRecordTab node={node} />
   return <PlaceholderTab tab={tab} />
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 输出预览面板 - 根据节点类型展示不同内容
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function OutputTab({ node }: { node: TraceNode }) {
+  // 根据节点类型和状态生成不同的输出预览
+  const getOutputConfig = () => {
+    switch (node.node_id) {
+      case "N01": // 剧本解析
+        return { type: "text", title: "Structured Script", count: 1 }
+      case "N02": // 拆镜
+        return { type: "text", title: "Shot List", count: 32 }
+      case "N06": // 视觉策划
+        return { type: "text", title: "Visual Strategy", count: 5 }
+      case "N07": // 美术资产图
+        return { type: "image", title: "Art Assets", count: 12 }
+      case "N07b": // 音色
+        return { type: "audio", title: "Voice Samples", count: 4 }
+      case "N10": // 关键帧
+        return { type: "image", title: "Keyframes", count: 32 }
+      case "N14": // 视频
+        return { type: "video", title: "Video Clips", count: 32 }
+      case "N20": // 视听整合
+        return { type: "video", title: "AV Integrated", count: 32 }
+      case "N23": // 成片
+        return { type: "video", title: "Final Cut", count: 1 }
+      default:
+        return { type: "text", title: "Output", count: 1 }
+    }
+  }
+
+  const config = getOutputConfig()
+  const isCompleted = node.status === "completed" || node.status === "gate_approved"
+  const isRunning = node.status === "running"
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {config.type === "image" && <ImageIcon className="w-4 h-4 text-primary" />}
+          {config.type === "video" && <Video className="w-4 h-4 text-primary" />}
+          {config.type === "audio" && <Music className="w-4 h-4 text-primary" />}
+          {config.type === "text" && <FileText className="w-4 h-4 text-primary" />}
+          <span className="text-sm font-medium">{config.title}</span>
+        </div>
+        <span className="text-xs text-muted-foreground">{config.count} items</span>
+      </div>
+
+      {/* 输出网格 */}
+      <div className={cn(
+        "grid gap-2",
+        config.type === "image" || config.type === "video" ? "grid-cols-3" : "grid-cols-1"
+      )}>
+        {Array.from({ length: Math.min(config.count, 9) }).map((_, i) => {
+          const itemCompleted = isCompleted || (isRunning && i < (node.batch_stats?.completed || 0))
+          const itemRunning = isRunning && i >= (node.batch_stats?.completed || 0) && i < (node.batch_stats?.completed || 0) + (node.batch_stats?.running || 0)
+          
+          return (
+            <OutputItem 
+              key={i}
+              index={i + 1}
+              type={config.type}
+              status={itemCompleted ? "completed" : itemRunning ? "running" : "pending"}
+              nodeId={node.node_id}
+            />
+          )
+        })}
+      </div>
+
+      {config.count > 9 && (
+        <button className="w-full text-xs text-muted-foreground hover:text-foreground py-2 border border-dashed border-border/50 rounded-lg transition-colors">
+          View all {config.count} items...
+        </button>
+      )}
+    </div>
+  )
+}
+
+function OutputItem({ index, type, status, nodeId }: { 
+  index: number
+  type: string
+  status: "completed" | "running" | "pending"
+  nodeId: string
+}) {
+  if (type === "image" || type === "video") {
+    return (
+      <div className={cn(
+        "aspect-[9/16] rounded-lg border-2 overflow-hidden relative",
+        status === "completed" ? "border-emerald-500/30 bg-emerald-950/20" :
+        status === "running" ? "border-blue-500/30 bg-blue-950/20 animate-pulse" :
+        "border-border/30 bg-secondary/20 border-dashed"
+      )}>
+        {status === "completed" ? (
+          <>
+            {/* 模拟图片/视频内容 */}
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-900/40 to-blue-900/40" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              {type === "video" && <Play className="w-8 h-8 text-white/60" />}
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 px-2 py-1 bg-black/60 text-[9px] text-white/80">
+              Shot #{index} {type === "video" && "| 2.1s"}
+            </div>
+          </>
+        ) : status === "running" ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+            <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            <span className="text-[10px] text-blue-400">Generating...</span>
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+            <div className="w-8 h-8 rounded-lg border border-dashed border-border/50 flex items-center justify-center">
+              {type === "video" ? <Video className="w-4 h-4 text-muted-foreground/50" /> : <ImageIcon className="w-4 h-4 text-muted-foreground/50" />}
+            </div>
+            <span className="text-[9px] text-muted-foreground">#{index}</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (type === "audio") {
+    return (
+      <div className={cn(
+        "h-16 rounded-lg border flex items-center gap-3 px-3",
+        status === "completed" ? "border-emerald-500/30 bg-emerald-950/20" :
+        status === "running" ? "border-blue-500/30 bg-blue-950/20" :
+        "border-border/30 bg-secondary/20 border-dashed"
+      )}>
+        <div className={cn(
+          "w-10 h-10 rounded-full flex items-center justify-center",
+          status === "completed" ? "bg-emerald-500/20" : "bg-secondary/50"
+        )}>
+          {status === "completed" ? (
+            <Play className="w-4 h-4 text-emerald-400" />
+          ) : (
+            <Music className="w-4 h-4 text-muted-foreground/50" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium truncate">Voice Sample #{index}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {status === "completed" ? "12.3s | 44.1kHz" : status === "running" ? "Generating..." : "Pending"}
+          </p>
+        </div>
+        {status === "completed" && (
+          <div className="flex-1 h-6 flex items-end gap-0.5">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div 
+                key={i} 
+                className="flex-1 bg-emerald-500/60 rounded-sm"
+                style={{ height: `${Math.random() * 100}%` }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Text output
+  return (
+    <div className={cn(
+      "p-3 rounded-lg border",
+      status === "completed" ? "border-emerald-500/30 bg-emerald-950/10" :
+      "border-border/30 bg-secondary/20 border-dashed"
+    )}>
+      {status === "completed" ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Output #{index}</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          </div>
+          <p className="text-[10px] text-muted-foreground line-clamp-3">
+            {nodeId === "N02" 
+              ? `Shot ${index}: 宫殿大厅夜景 | 中景 | 太后端坐凤椅，目光如炬...`
+              : "Output data generated successfully."}
+          </p>
+        </div>
+      ) : (
+        <div className="text-center py-2 text-muted-foreground">
+          <FileText className="w-5 h-5 mx-auto mb-1 opacity-50" />
+          <span className="text-[10px]">Pending</span>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -147,58 +317,50 @@ function renderTabContent(node: TraceNode, tab: string) {
 
 function PlanningDecisionChain({ node }: { node: TraceNode }) {
   const data = MOCK_N02_PLANNING
+  const [expandedStep, setExpandedStep] = useState<number | null>(1)
   
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Step 1: 全集需求理解 */}
       <DecisionStep 
         step={1} 
-        title="全集需求理解" 
+        title="Context Understanding" 
         icon={Brain}
         status="completed"
+        expanded={expandedStep === 1}
+        onToggle={() => setExpandedStep(expandedStep === 1 ? null : 1)}
       >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-          <MiniInfoCard label="题材" value={data.context.genre} />
-          <MiniInfoCard label="场景数" value={data.context.scene_count} />
-          <MiniInfoCard label="角色数" value={data.context.character_count} />
-          <MiniInfoCard label="镜头数" value={data.context.shot_count} />
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <MiniInfoCard label="Genre" value={data.context.genre} />
+          <MiniInfoCard label="Shots" value={data.context.shot_count} />
+          <MiniInfoCard label="Scenes" value={data.context.scene_count} />
+          <MiniInfoCard label="Characters" value={data.context.character_count} />
         </div>
-        <div className="text-xs text-muted-foreground mb-2">
-          <span className="text-foreground/70">情绪弧线：</span> {data.context.emotion_arc}
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {data.context.project_constraints.map((c, i) => (
-            <span key={i} className="text-[10px] px-2 py-0.5 bg-secondary/50 rounded-full text-muted-foreground">{c}</span>
-          ))}
+        <div className="text-[10px] text-muted-foreground">
+          <span className="text-foreground/70">Emotion Arc:</span> {data.context.emotion_arc}
         </div>
       </DecisionStep>
 
       {/* Step 2: RAG 检索 */}
       <DecisionStep 
         step={2} 
-        title="场景级 RAG 检索" 
-        subtitle="按场景类型批量检索，非逐镜头"
+        title="RAG Retrieval" 
+        subtitle="By scene type"
         icon={Database}
         status="completed"
+        expanded={expandedStep === 2}
+        onToggle={() => setExpandedStep(expandedStep === 2 ? null : 2)}
       >
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {data.rag_by_scene.map((scene, i) => (
             <div key={i} className={cn(
-              "flex items-center justify-between p-2 rounded-lg text-xs",
+              "flex items-center justify-between p-1.5 rounded text-[10px]",
               scene.has_gap ? "bg-amber-500/10 border border-amber-500/30" : "bg-secondary/30"
             )}>
-              <span className="font-medium text-foreground/90">{scene.scene_type}</span>
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground">
-                  {scene.results_count > 0 ? `TOP-3 最高 ${scene.top_score}` : "无案例"}
-                </span>
-                <span className={cn(
-                  "px-2 py-0.5 rounded",
-                  scene.has_gap ? "bg-amber-500/20 text-amber-300" : "bg-emerald-500/20 text-emerald-300"
-                )}>
-                  {scene.recommended_strategy}
-                </span>
-                {scene.has_gap && <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
+              <span className="text-foreground/80 truncate max-w-[120px]">{scene.scene_type}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">{scene.results_count > 0 ? `${scene.top_score}` : "N/A"}</span>
+                {scene.has_gap && <AlertTriangle className="w-3 h-3 text-amber-400" />}
               </div>
             </div>
           ))}
@@ -208,99 +370,78 @@ function PlanningDecisionChain({ node }: { node: TraceNode }) {
       {/* Step 3: 策略表 */}
       <DecisionStep 
         step={3} 
-        title="全集视觉策略表" 
+        title="Strategy Table" 
         icon={Layers}
         status="completed"
+        expanded={expandedStep === 3}
+        onToggle={() => setExpandedStep(expandedStep === 3 ? null : 3)}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border/30">
-                <th className="text-left py-2 text-muted-foreground font-medium">场景</th>
-                <th className="text-center py-2 text-muted-foreground font-medium">镜头数</th>
-                <th className="text-center py-2 text-muted-foreground font-medium">难度分布</th>
-                <th className="text-right py-2 text-muted-foreground font-medium">预算</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.strategy_table.map((row, i) => (
-                <tr key={i} className="border-b border-border/10">
-                  <td className="py-2 font-medium text-foreground/90">{row.scene_type}</td>
-                  <td className="py-2 text-center text-muted-foreground">{row.shot_count}</td>
-                  <td className="py-2 text-center text-muted-foreground">{row.difficulty_distribution}</td>
-                  <td className="py-2 text-right text-emerald-400">¥{row.budget_cny}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-1">
+          {data.strategy_table.map((row, i) => (
+            <div key={i} className="flex items-center justify-between text-[10px] py-1 border-b border-border/10 last:border-0">
+              <span className="text-foreground/80 truncate max-w-[100px]">{row.scene_type}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">{row.shot_count} shots</span>
+                <span className="text-emerald-400">CNY {row.budget_cny}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </DecisionStep>
 
       {/* Step 4: 生成配方 */}
       <DecisionStep 
         step={4} 
-        title="生成配方总览" 
-        subtitle={`${data.shot_recipes.length} 个镜头配方示例 · 总预算 ¥${data.total_budget_cny}`}
+        title="Generation Recipes" 
+        subtitle={`${data.shot_recipes.length} samples | Budget CNY ${data.total_budget_cny}`}
         icon={ListChecks}
         status="completed"
+        expanded={expandedStep === 4}
+        onToggle={() => setExpandedStep(expandedStep === 4 ? null : 4)}
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border/30">
-                <th className="text-left py-2 text-muted-foreground font-medium">#</th>
-                <th className="text-left py-2 text-muted-foreground font-medium">场景</th>
-                <th className="text-center py-2 text-muted-foreground font-medium">景别</th>
-                <th className="text-center py-2 text-muted-foreground font-medium">难度</th>
-                <th className="text-center py-2 text-muted-foreground font-medium">候选</th>
-                <th className="text-right py-2 text-muted-foreground font-medium">预算</th>
-                <th className="text-left py-2 text-muted-foreground font-medium pl-3">备注</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.shot_recipes.map((shot, i) => (
-                <tr key={i} className={cn(
-                  "border-b border-border/10",
-                  shot.notes.includes("高潮") && "bg-violet-500/10"
-                )}>
-                  <td className="py-1.5 font-mono text-foreground/70">{shot.shot_number}</td>
-                  <td className="py-1.5 text-foreground/90">{shot.scene}</td>
-                  <td className="py-1.5 text-center text-muted-foreground">{shot.shot_type}</td>
-                  <td className="py-1.5 text-center">
-                    <DifficultyBadge difficulty={shot.difficulty} />
-                  </td>
-                  <td className="py-1.5 text-center text-muted-foreground">{shot.candidate_count}</td>
-                  <td className="py-1.5 text-right text-emerald-400">¥{shot.budget_cny}</td>
-                  <td className="py-1.5 pl-3 text-muted-foreground text-[10px]">{shot.notes}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-1">
+          {data.shot_recipes.slice(0, 4).map((shot, i) => (
+            <div key={i} className={cn(
+              "flex items-center justify-between text-[10px] py-1 px-1.5 rounded",
+              shot.notes.includes("高潮") && "bg-violet-500/10"
+            )}>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-primary">#{shot.shot_number}</span>
+                <span className="text-foreground/80">{shot.shot_type}</span>
+                <DifficultyBadge difficulty={shot.difficulty} />
+              </div>
+              <span className="text-emerald-400">CNY {shot.budget_cny}</span>
+            </div>
+          ))}
+          {data.shot_recipes.length > 4 && (
+            <p className="text-[10px] text-muted-foreground text-center py-1">+{data.shot_recipes.length - 4} more...</p>
+          )}
         </div>
       </DecisionStep>
 
       {/* Step 5: 自检 */}
       <DecisionStep 
         step={5} 
-        title="自检" 
+        title="Self-Check" 
         icon={CheckCircle2}
         status="completed"
+        expanded={expandedStep === 5}
+        onToggle={() => setExpandedStep(expandedStep === 5 ? null : 5)}
       >
-        <div className="space-y-2">
+        <div className="space-y-1">
           {data.self_check.checks.map((check, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
+            <div key={i} className="flex items-center gap-2 text-[10px]">
               {check.passed 
-                ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                : <XCircle className="w-3.5 h-3.5 text-red-400" />
+                ? <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                : <XCircle className="w-3 h-3 text-red-400 shrink-0" />
               }
-              <span className="text-foreground/90">{check.item}：</span>
-              <span className="text-muted-foreground">{check.detail}</span>
+              <span className="text-foreground/80">{check.item}</span>
             </div>
           ))}
           {data.self_check.warnings.map((w, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs text-amber-400 mt-2">
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>{w}</span>
+            <div key={i} className="flex items-center gap-2 text-[10px] text-amber-400 mt-1">
+              <AlertTriangle className="w-3 h-3 shrink-0" />
+              <span className="truncate">{w}</span>
             </div>
           ))}
         </div>
@@ -318,85 +459,44 @@ function ExecutionOverview({ node }: { node: TraceNode }) {
   const summary = data.summary
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* 关键指标 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        <StatCard label="总镜头" value={summary.total_shots} />
-        <StatCard label="已完成" value={summary.completed} color="text-emerald-400" />
-        <StatCard label="运行中" value={summary.running} color="text-blue-400" icon={<div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />} />
-        <StatCard label="重试" value={summary.retried} color="text-amber-400" />
-        <StatCard label="一次通过率" value={`${(summary.one_pass_rate * 100).toFixed(1)}%`} color="text-emerald-400" />
-        <StatCard label="预算使用" value={`${(summary.budget_usage * 100).toFixed(0)}%`} color={summary.budget_usage > 0.9 ? "text-amber-400" : "text-emerald-400"} />
+      <div className="grid grid-cols-3 gap-2">
+        <StatCard label="Total" value={summary.total_shots} />
+        <StatCard label="Done" value={summary.completed} color="text-emerald-400" />
+        <StatCard label="Running" value={summary.running} color="text-blue-400" />
+        <StatCard label="Retried" value={summary.retried} color="text-amber-400" />
+        <StatCard label="Pass Rate" value={`${(summary.one_pass_rate * 100).toFixed(0)}%`} color="text-emerald-400" />
+        <StatCard label="Budget" value={`${(summary.budget_usage * 100).toFixed(0)}%`} color={summary.budget_usage > 0.9 ? "text-amber-400" : "text-emerald-400"} />
       </div>
 
       {/* 成本与质量 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard icon={Clock} label="总耗时" value={formatDuration(summary.total_duration_seconds)} />
-        <MetricCard icon={DollarSign} label="总成本" value={`¥${summary.total_cost_cny}`} subtitle={`预算 ¥${summary.budget_cny}`} />
-        <MetricCard icon={Zap} label="平均质量" value={summary.avg_quality_score.toString()} />
-        <MetricCard icon={BarChart3} label="质量分布" value="7.1 - 9.5" subtitle="最低 - 最高" />
+      <div className="grid grid-cols-2 gap-2">
+        <MetricCard icon={Clock} label="Duration" value={formatDuration(summary.total_duration_seconds)} />
+        <MetricCard icon={DollarSign} label="Cost" value={`CNY ${summary.total_cost_cny}`} />
+        <MetricCard icon={Zap} label="Avg Quality" value={summary.avg_quality_score.toString()} />
+        <MetricCard icon={RefreshCw} label="Retries" value={summary.retried.toString()} />
       </div>
 
-      {/* 执行结果表 */}
+      {/* 简化的执行结果 */}
       <div>
-        <h4 className="text-xs font-medium text-muted-foreground mb-2">执行结果（显示异常项优先）</h4>
-        <div className="overflow-x-auto rounded-lg border border-border/30">
-          <table className="w-full text-xs">
-            <thead className="bg-secondary/30">
-              <tr>
-                <th className="text-left py-2 px-3 text-muted-foreground font-medium">#</th>
-                <th className="text-left py-2 px-3 text-muted-foreground font-medium">场景</th>
-                <th className="text-center py-2 px-3 text-muted-foreground font-medium">状态</th>
-                <th className="text-center py-2 px-3 text-muted-foreground font-medium">评分</th>
-                <th className="text-center py-2 px-3 text-muted-foreground font-medium">耗时</th>
-                <th className="text-right py-2 px-3 text-muted-foreground font-medium">成本</th>
-                <th className="text-center py-2 px-3 text-muted-foreground font-medium">微调</th>
-                <th className="text-center py-2 px-3 text-muted-foreground font-medium">重试</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.shot_results.map((shot, i) => (
-                <tr key={i} className={cn(
-                  "border-t border-border/10",
-                  shot.retry_count > 0 && "bg-amber-500/5",
-                  shot.status === "running" && "bg-blue-500/5"
-                )}>
-                  <td className="py-2 px-3 font-mono text-foreground/70">{shot.shot_number}</td>
-                  <td className="py-2 px-3 text-foreground/90">{shot.scene}</td>
-                  <td className="py-2 px-3 text-center">
-                    <StatusBadge status={shot.status} />
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    {shot.quality_score ? (
-                      <span className={cn(
-                        shot.quality_score >= 8.5 ? "text-emerald-400" :
-                        shot.quality_score >= 7.5 ? "text-foreground" : "text-amber-400"
-                      )}>
-                        {shot.quality_score}
-                      </span>
-                    ) : "—"}
-                  </td>
-                  <td className="py-2 px-3 text-center text-muted-foreground">
-                    {shot.duration_seconds ? `${shot.duration_seconds}s` : "—"}
-                  </td>
-                  <td className="py-2 px-3 text-right text-emerald-400">
-                    {shot.cost_cny > 0 ? `¥${shot.cost_cny}` : "—"}
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    {shot.has_adjustments && <span className="text-violet-400">📌</span>}
-                  </td>
-                  <td className="py-2 px-3 text-center">
-                    {shot.retry_count > 0 && (
-                      <span className="text-amber-400 flex items-center justify-center gap-1">
-                        <RefreshCw className="w-3 h-3" />
-                        {shot.retry_count}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <h4 className="text-[10px] font-medium text-muted-foreground mb-2">Recent Results</h4>
+        <div className="space-y-1">
+          {data.shot_results.slice(0, 5).map((shot, i) => (
+            <div key={i} className={cn(
+              "flex items-center justify-between text-[10px] py-1.5 px-2 rounded",
+              shot.retry_count > 0 ? "bg-amber-500/10" : shot.status === "running" ? "bg-blue-500/10" : "bg-secondary/30"
+            )}>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-primary">#{shot.shot_number}</span>
+                <StatusBadge status={shot.status} />
+              </div>
+              <div className="flex items-center gap-2">
+                {shot.quality_score && <span className={shot.quality_score >= 8 ? "text-emerald-400" : "text-amber-400"}>{shot.quality_score}</span>}
+                {shot.retry_count > 0 && <span className="text-amber-400">+{shot.retry_count}</span>}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -411,129 +511,74 @@ function ShotDetailsTab({ node }: { node: TraceNode }) {
   const data = MOCK_N14_EXECUTION
   const [expandedShot, setExpandedShot] = useState<number | null>(28)
 
-  const shot28 = data.shot_results.find(s => s.shot_number === 28)
-  const shot12 = data.shot_results.find(s => s.shot_number === 12)
-
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground mb-4">点击展开查看镜头级执行详情和微调记录</p>
-      
-      {/* 正常镜头（无微调） */}
-      <ShotDetailCard 
-        shot={data.shot_results[1]!} 
-        expanded={false}
-        onToggle={() => {}}
-      />
+    <div className="space-y-2">
+      {data.shot_results.map((shot, i) => {
+        const hasDetails = shot.has_adjustments || shot.retry_count > 0
+        const isExpanded = expandedShot === shot.shot_number
 
-      {/* 有微调的镜头 */}
-      <ShotDetailCard 
-        shot={shot12!} 
-        expanded={expandedShot === 12}
-        onToggle={() => setExpandedShot(expandedShot === 12 ? null : 12)}
-      />
-
-      {/* 有重试的镜头（展开） */}
-      <ShotDetailCard 
-        shot={shot28!} 
-        expanded={expandedShot === 28}
-        onToggle={() => setExpandedShot(expandedShot === 28 ? null : 28)}
-      />
-    </div>
-  )
-}
-
-function ShotDetailCard({ shot, expanded, onToggle }: { 
-  shot: typeof MOCK_N14_EXECUTION.shot_results[0]
-  expanded: boolean
-  onToggle: () => void 
-}) {
-  const hasDetails = shot.has_adjustments || shot.retry_count > 0
-
-  return (
-    <div className={cn(
-      "rounded-lg border transition-all",
-      shot.retry_count > 0 ? "border-amber-500/30 bg-amber-500/5" :
-      shot.has_adjustments ? "border-violet-500/30 bg-violet-500/5" :
-      "border-border/30 bg-secondary/20"
-    )}>
-      <div 
-        className={cn("p-3 flex items-center justify-between", hasDetails && "cursor-pointer")}
-        onClick={hasDetails ? onToggle : undefined}
-      >
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-xs font-bold text-primary">#{shot.shot_number}</span>
-          <span className="text-xs text-foreground/90">{shot.scene}</span>
-          <span className="text-[10px] text-muted-foreground">{shot.shot_type}</span>
-          <StatusBadge status={shot.status} />
-        </div>
-        <div className="flex items-center gap-4 text-xs">
-          {shot.quality_score && (
-            <span className={cn(
-              shot.quality_score >= 8.5 ? "text-emerald-400" : 
-              shot.quality_score >= 7.5 ? "text-foreground" : "text-amber-400"
-            )}>
-              {shot.quality_score}
-            </span>
-          )}
-          {shot.has_adjustments && <span className="text-violet-400 text-[10px]">有微调</span>}
-          {shot.retry_count > 0 && <span className="text-amber-400 text-[10px]">重试{shot.retry_count}次</span>}
-          {hasDetails && (expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />)}
-        </div>
-      </div>
-
-      {expanded && hasDetails && (
-        <div className="px-3 pb-3 pt-0 border-t border-border/20 space-y-3">
-          {/* 微调记录 */}
-          {shot.adjustments && shot.adjustments.length > 0 && (
-            <div>
-              <p className="text-[10px] text-violet-400 font-medium mb-1.5 flex items-center gap-1">
-                <Lightbulb className="w-3 h-3" /> 执行时微调（规则+记忆，未调 LLM）
-              </p>
-              {shot.adjustments.map((adj, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground ml-4">
-                  <span className="font-mono text-foreground/70">{adj.param}:</span>
-                  <span>{adj.from_value}</span>
-                  <ArrowRight className="w-3 h-3" />
-                  <span className="text-violet-300">{adj.to_value}</span>
-                  <span className="text-[10px] text-muted-foreground">({adj.reason})</span>
-                </div>
-              ))}
+        return (
+          <div key={i} className={cn(
+            "rounded-lg border transition-all",
+            shot.retry_count > 0 ? "border-amber-500/30 bg-amber-500/5" :
+            shot.has_adjustments ? "border-violet-500/30 bg-violet-500/5" :
+            shot.status === "running" ? "border-blue-500/30 bg-blue-500/5" :
+            "border-border/30 bg-secondary/10"
+          )}>
+            <div 
+              className={cn("p-2 flex items-center justify-between", hasDetails && "cursor-pointer")}
+              onClick={hasDetails ? () => setExpandedShot(isExpanded ? null : shot.shot_number) : undefined}
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] font-bold text-primary">#{shot.shot_number}</span>
+                <span className="text-[10px] text-foreground/80 truncate max-w-[80px]">{shot.scene}</span>
+                <StatusBadge status={shot.status} />
+              </div>
+              <div className="flex items-center gap-2 text-[10px]">
+                {shot.quality_score && (
+                  <span className={shot.quality_score >= 8.5 ? "text-emerald-400" : shot.quality_score >= 7.5 ? "text-foreground" : "text-amber-400"}>
+                    {shot.quality_score}
+                  </span>
+                )}
+                {shot.retry_count > 0 && <span className="text-amber-400">+{shot.retry_count}</span>}
+                {hasDetails && (isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />)}
+              </div>
             </div>
-          )}
 
-          {/* 重试记录 */}
-          {shot.retries && shot.retries.length > 0 && (
-            <div>
-              <p className="text-[10px] text-amber-400 font-medium mb-1.5 flex items-center gap-1">
-                <RefreshCw className="w-3 h-3" /> 重试链
-              </p>
-              {shot.retries.map((retry, i) => (
-                <div key={i} className="flex items-center gap-2 text-xs ml-4 mb-1">
-                  <span className="text-muted-foreground">第{retry.attempt}次:</span>
-                  <span className="text-red-400">{retry.score} ❌</span>
-                  <span className="text-[10px] text-muted-foreground">({retry.failure_reason})</span>
-                  <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-[10px] text-amber-300">{retry.adjustment_made}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 记忆写入 */}
-          {(shot as any).memory_written && (
-            <div className="flex items-center gap-2 text-xs text-amber-400">
-              <Database className="w-3 h-3" />
-              <span>写入记忆: {(shot as any).memory_written}</span>
-            </div>
-          )}
-          {(shot as any).evolution_reported && (
-            <div className="flex items-center gap-2 text-xs text-amber-400">
-              <TrendingUp className="w-3 h-3" />
-              <span>上报 Evolution: {(shot as any).evolution_reported}</span>
-            </div>
-          )}
-        </div>
-      )}
+            {isExpanded && hasDetails && (
+              <div className="px-2 pb-2 border-t border-border/20 pt-2 space-y-2">
+                {shot.adjustments && (
+                  <div className="space-y-1">
+                    <p className="text-[9px] text-muted-foreground font-medium">Adjustments:</p>
+                    {shot.adjustments.map((adj, j) => (
+                      <div key={j} className="text-[9px] flex items-center gap-1 text-violet-300">
+                        <span className="font-mono">{adj.param}</span>
+                        <span className="text-muted-foreground">{adj.from_value} → {adj.to_value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {shot.retries && (
+                  <div className="space-y-1">
+                    <p className="text-[9px] text-muted-foreground font-medium">Retries:</p>
+                    {shot.retries.map((retry, j) => (
+                      <div key={j} className="text-[9px] text-amber-300">
+                        Attempt {retry.attempt}: {retry.score} - {retry.failure_reason}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {shot.memory_written && (
+                  <div className="text-[9px] text-cyan-400 flex items-center gap-1">
+                    <Lightbulb className="w-3 h-3" />
+                    Memory: {shot.memory_written}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -543,115 +588,32 @@ function ShotDetailCard({ shot, expanded, onToggle }: {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function ReviewReportTab({ node }: { node: TraceNode }) {
-  // 区分质检（N03, N11, N15）和复盘（N12, N16）
-  const isQC = ["N03", "N11", "N15"].includes(node.node_id)
-  
-  if (isQC) {
-    const data = MOCK_N11_QC
-    return (
-      <div className="space-y-5">
-        {/* 总览 */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <StatCard label="总镜头" value={data.summary.total_shots} />
-          <StatCard label="通过" value={data.summary.passed} color="text-emerald-400" />
-          <StatCard label="打回" value={data.summary.rejected} color="text-red-400" />
-          <StatCard label="通过率" value={`${(data.summary.pass_rate * 100).toFixed(1)}%`} color="text-emerald-400" />
-          <StatCard label="平均分" value={data.summary.avg_score.toString()} />
-        </div>
+  const data = MOCK_N11_QC
 
-        {/* 打回项 */}
-        {data.rejected_items.length > 0 && (
-          <div>
-            <h4 className="text-xs font-medium text-red-400 mb-2 flex items-center gap-1">
-              <XCircle className="w-3.5 h-3.5" /> 打回项（{data.rejected_items.length}）
-            </h4>
-            <div className="space-y-2">
-              {data.rejected_items.map((item, i) => (
-                <div key={i} className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-mono text-foreground">#{item.shot_number}</span>
-                    <span className="text-red-400">{item.score}</span>
-                  </div>
-                  <div className="text-muted-foreground">
-                    {item.failed_dimension}: <span className="text-red-400">{item.failed_score}</span> &lt; 阈值
-                  </div>
-                  <div className="text-amber-400 mt-1">{item.action}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-2">
+        <StatCard label="Pass Rate" value={`${(data.summary.pass_rate * 100).toFixed(0)}%`} color="text-emerald-400" />
+        <StatCard label="Avg Score" value={data.summary.avg_score.toFixed(1)} />
+        <StatCard label="Rejected" value={data.summary.rejected} color="text-red-400" />
+      </div>
 
-        {/* 模型投票 */}
-        <div>
-          <h4 className="text-xs font-medium text-muted-foreground mb-2">三模型投票结果（去极值取平均）</h4>
-          <div className="flex gap-3">
-            {data.model_votes.map((vote, i) => (
-              <div key={i} className="flex-1 p-3 rounded-lg bg-secondary/30 text-center">
-                <p className="text-[10px] text-muted-foreground mb-1">{vote.model}</p>
-                <p className="text-lg font-semibold text-foreground">{vote.avg_score}</p>
+      <div>
+        <h4 className="text-[10px] font-medium text-muted-foreground mb-2">Rejected Items</h4>
+        <div className="space-y-1">
+          {data.rejected_shots.map((shot, i) => (
+            <div key={i} className="p-2 rounded bg-red-500/10 border border-red-500/30 text-[10px]">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-mono text-primary">#{shot.shot_number}</span>
+                <span className="text-red-400">{shot.final_score}</span>
               </div>
-            ))}
-          </div>
+              <p className="text-muted-foreground">{shot.rejection_reason}</p>
+            </div>
+          ))}
         </div>
       </div>
-    )
-  } else {
-    // 复盘节点（N12, N16）
-    const data = MOCK_N12_REVIEW
-    return (
-      <div className="space-y-5">
-        <div className="flex items-center gap-4">
-          <div className="text-2xl font-bold text-foreground">{data.overall_score}</div>
-          <div className="text-xs text-muted-foreground">整体连续性评分</div>
-        </div>
-
-        {/* 问题 */}
-        {data.issues.length > 0 && (
-          <div>
-            <h4 className="text-xs font-medium text-amber-400 mb-2 flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5" /> 发现问题（{data.issues.length}）
-            </h4>
-            <div className="space-y-2">
-              {data.issues.map((issue, i) => (
-                <div key={i} className={cn(
-                  "p-3 rounded-lg text-xs",
-                  issue.severity === "critical" ? "bg-red-500/10 border border-red-500/30" : "bg-amber-500/10 border border-amber-500/30"
-                )}>
-                  <div className="flex items-start justify-between mb-1">
-                    <span className="text-foreground">{issue.description}</span>
-                    <span className="text-muted-foreground text-[10px]">#{issue.affected_shots.join(", #")}</span>
-                  </div>
-                  <div className="text-muted-foreground mb-1">{issue.suggestion}</div>
-                  <div className="flex gap-2">
-                    {issue.memory_written && <span className="text-violet-400 text-[10px]">✓ 写入记忆</span>}
-                    {issue.evolution_reported && <span className="text-cyan-400 text-[10px]">✓ 上报 Evolution</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 亮点 */}
-        {data.highlights.length > 0 && (
-          <div>
-            <h4 className="text-xs font-medium text-emerald-400 mb-2 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> 亮点（{data.highlights.length}）
-            </h4>
-            <div className="space-y-2">
-              {data.highlights.map((h, i) => (
-                <div key={i} className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs flex items-center justify-between">
-                  <span className="text-foreground">{h.description}</span>
-                  <span className="text-emerald-400 font-medium">{h.score}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
+    </div>
+  )
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -659,30 +621,39 @@ function ReviewReportTab({ node }: { node: TraceNode }) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function DimensionAnalysisTab({ node }: { node: TraceNode }) {
-  const data = MOCK_N11_QC
+  const dimensions = [
+    { name: "Composition", avg: 8.7, min: 7.2, max: 9.5 },
+    { name: "Lighting", avg: 8.2, min: 5.8, max: 9.3 },
+    { name: "Color", avg: 8.5, min: 7.5, max: 9.4 },
+    { name: "Character", avg: 8.4, min: 6.8, max: 9.2 },
+    { name: "Motion", avg: 7.9, min: 6.5, max: 9.0 },
+    { name: "Continuity", avg: 8.1, min: 6.2, max: 9.1 },
+  ]
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">8 维度评分权重及本批次平均得分</p>
-      <div className="space-y-2">
-        {data.dimensions.map((dim, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <div className="w-28 text-xs text-muted-foreground">{dim.label}</div>
-            <div className="flex-1 h-2 bg-secondary/50 rounded-full overflow-hidden">
-              <div 
-                className={cn(
-                  "h-full rounded-full transition-all",
-                  dim.avg_score >= 8.5 ? "bg-emerald-500" :
-                  dim.avg_score >= 7.5 ? "bg-blue-500" : "bg-amber-500"
-                )}
-                style={{ width: `${dim.avg_score * 10}%` }}
-              />
-            </div>
-            <div className="w-10 text-xs text-right font-medium">{dim.avg_score}</div>
-            <div className="w-12 text-[10px] text-muted-foreground text-right">{(dim.weight * 100).toFixed(0)}%</div>
+    <div className="space-y-3">
+      {dimensions.map((dim, i) => (
+        <div key={i} className="space-y-1">
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="text-foreground/80">{dim.name}</span>
+            <span className={dim.avg >= 8 ? "text-emerald-400" : "text-amber-400"}>{dim.avg}</span>
           </div>
-        ))}
-      </div>
+          <div className="h-2 bg-secondary/50 rounded-full overflow-hidden relative">
+            <div 
+              className={cn("h-full rounded-full", dim.avg >= 8 ? "bg-emerald-500/60" : "bg-amber-500/60")}
+              style={{ width: `${dim.avg * 10}%` }}
+            />
+            <div 
+              className="absolute top-0 w-0.5 h-full bg-red-400"
+              style={{ left: `${dim.min * 10}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[9px] text-muted-foreground">
+            <span>Min: {dim.min}</span>
+            <span>Max: {dim.max}</span>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -694,57 +665,33 @@ function DimensionAnalysisTab({ node }: { node: TraceNode }) {
 function GateRecordTab({ node }: { node: TraceNode }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <div className={cn(
-          "w-12 h-12 rounded-full flex items-center justify-center text-xl",
-          node.gate_decision === "approved" ? "bg-emerald-500/20 text-emerald-400" :
-          node.gate_decision === "rejected" ? "bg-amber-500/20 text-amber-400" :
-          "bg-pink-500/20 text-pink-400"
-        )}>
-          {node.gate_decision === "approved" ? "✓" : node.gate_decision === "rejected" ? "↩" : "⏳"}
+      <div className="p-3 rounded-lg border border-border/30 bg-secondary/20">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium">Reviewer</span>
+          <span className="text-xs text-foreground">{node.gate_reviewer_name || "Pending"}</span>
         </div>
-        <div>
-          <p className="text-sm font-medium text-foreground">
-            {node.gate_decision === "approved" ? "审核通过" : 
-             node.gate_decision === "rejected" ? "审核打回" : "等待审核"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {node.gate_reviewer_name || "待分配审核人"}
-            {node.gate_duration_seconds && ` · 耗时 ${formatDuration(node.gate_duration_seconds)}`}
-          </p>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium">Decision</span>
+          <span className={cn(
+            "text-xs px-2 py-0.5 rounded",
+            node.gate_decision === "approved" ? "bg-emerald-500/20 text-emerald-400" : 
+            node.gate_decision === "rejected" ? "bg-red-500/20 text-red-400" : 
+            "bg-amber-500/20 text-amber-400"
+          )}>
+            {node.gate_decision === "approved" ? "Approved" : 
+             node.gate_decision === "rejected" ? "Rejected" : "Pending"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium">Duration</span>
+          <span className="text-xs text-muted-foreground">{node.gate_duration_seconds ? formatDuration(node.gate_duration_seconds) : "-"}</span>
         </div>
       </div>
 
       {node.gate_feedback && (
-        <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
-          <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
-            <MessageSquare className="w-3 h-3" /> 审核批注
-          </p>
-          <p className="text-sm text-foreground">&ldquo;{node.gate_feedback}&rdquo;</p>
-        </div>
-      )}
-
-      {node.gate_decision === "approved" && node.node_id === "N08" && (
-        <div className="text-xs text-muted-foreground">
-          <p className="mb-2">资产确认情况：</p>
-          <div className="space-y-1 ml-2">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              <span>女主角（克莱尔）- 候选 #3 选定</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              <span>太后 - 候选 #2 选定，发型需微调</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              <span>宫殿大厅场景 - 候选 #1 选定</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              <span>太后音色 - 样本 #2 选定</span>
-            </div>
-          </div>
+        <div className="p-3 rounded-lg border border-border/30 bg-secondary/20">
+          <p className="text-xs font-medium mb-2">Feedback</p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">{node.gate_feedback}</p>
         </div>
       )}
     </div>
@@ -758,25 +705,23 @@ function GateRecordTab({ node }: { node: TraceNode }) {
 function FreezeRecordTab({ node }: { node: TraceNode }) {
   return (
     <div className="space-y-3">
-      {node.status === "completed" ? (
-        <>
-          <div className="flex items-center gap-2 text-emerald-400">
-            <CheckCircle2 className="w-4 h-4" />
-            <span className="text-sm font-medium">已固化</span>
+      <div className="p-3 rounded-lg border border-border/30 bg-secondary/20">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium">Status</span>
+          <span className={cn(
+            "text-xs px-2 py-0.5 rounded",
+            node.status === "completed" ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"
+          )}>
+            {node.status === "completed" ? "Frozen" : "Pending"}
+          </span>
+        </div>
+        {node.duration_seconds && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">Duration</span>
+            <span className="text-xs text-muted-foreground">{formatDuration(node.duration_seconds)}</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            产物已锁定，不可修改。任何后续修改需创建新版本。
-          </p>
-          {node.model && (
-            <div className="p-3 rounded-lg bg-secondary/30 text-xs">
-              <p className="text-muted-foreground mb-1">固化工具</p>
-              <p className="text-foreground">{node.model}</p>
-            </div>
-          )}
-        </>
-      ) : (
-        <p className="text-xs text-muted-foreground">等待上游节点完成后执行定稿操作</p>
-      )}
+        )}
+      </div>
     </div>
   )
 }
@@ -788,140 +733,156 @@ function FreezeRecordTab({ node }: { node: TraceNode }) {
 function ComposeOverviewTab({ node }: { node: TraceNode }) {
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        {node.node_id === "N23" && "FFmpeg 多轨合成：视频 + TTS + BGM + SFX → 成片"}
-        {node.node_id === "N16b" && "影调一致化 + 节奏调整 + 转场处理"}
-        {node.node_id === "N26" && "按配置自动推送至 TikTok / YouTube / 飞书"}
-      </p>
-      {node.status === "pending" && (
-        <p className="text-xs text-muted-foreground italic">等待上游节点完成</p>
-      )}
+      <div className="grid grid-cols-2 gap-2">
+        <MetricCard icon={Clock} label="Duration" value={node.duration_seconds ? formatDuration(node.duration_seconds) : "-"} />
+        <MetricCard icon={DollarSign} label="Cost" value={node.cost_cny > 0 ? `CNY ${node.cost_cny}` : "-"} />
+      </div>
+      <div className="p-3 rounded-lg border border-border/30 bg-secondary/20">
+        <p className="text-xs font-medium mb-2">Model</p>
+        <p className="text-[11px] text-muted-foreground">{node.model || "N/A"}</p>
+      </div>
     </div>
   )
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 遥测 Tab
+// 遥测面板
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function TelemetryTab({ node }: { node: TraceNode }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <MetricCard icon={Clock} label="执行时长" value={node.duration_seconds != null ? formatDuration(node.duration_seconds) : "—"} />
-      <MetricCard icon={DollarSign} label="费用" value={`¥${node.cost_cny.toFixed(3)}`} />
-      <MetricCard icon={Cpu} label="模型" value={node.model || "N/A"} />
-      <MetricCard icon={Zap} label="质量均分" value={node.quality_score != null ? node.quality_score.toString() : "N/A"} />
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2">
+        <MetricCard icon={Clock} label="Duration" value={node.duration_seconds ? formatDuration(node.duration_seconds) : "-"} />
+        <MetricCard icon={DollarSign} label="Cost" value={node.cost_cny > 0 ? `CNY ${node.cost_cny.toFixed(3)}` : "-"} />
+        <MetricCard icon={Cpu} label="Model" value={node.model || "N/A"} />
+        <MetricCard icon={Zap} label="Quality" value={node.quality_score?.toString() || "-"} />
+      </div>
     </div>
   )
 }
 
 function PlaceholderTab({ tab }: { tab: string }) {
-  return <p className="text-xs text-muted-foreground italic">{tab} — 后端 API 接通后展示完整数据</p>
+  return (
+    <div className="text-center py-8 text-muted-foreground">
+      <FileText className="w-8 h-8 mx-auto mb-2 opacity-50" />
+      <p className="text-xs">{tab} content</p>
+    </div>
+  )
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 共享子组件
+// 辅助组件
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-function DecisionStep({ step, title, subtitle, icon: Icon, status, children }: {
+function DecisionStep({ step, title, subtitle, icon: Icon, status, expanded, onToggle, children }: {
   step: number
   title: string
   subtitle?: string
   icon: React.ComponentType<{ className?: string }>
   status: "completed" | "running" | "pending"
+  expanded?: boolean
+  onToggle?: () => void
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border border-border/30 bg-secondary/10 overflow-hidden">
-      <div className="px-4 py-2.5 bg-secondary/30 border-b border-border/20 flex items-center gap-3">
-        <div className={cn(
-          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-          status === "completed" ? "bg-emerald-500/20 text-emerald-400" : "bg-secondary text-muted-foreground"
-        )}>
-          {step}
+    <div className={cn(
+      "rounded-lg border transition-all",
+      status === "completed" ? "border-emerald-500/30 bg-emerald-950/10" :
+      status === "running" ? "border-blue-500/30 bg-blue-950/10" :
+      "border-border/30 bg-secondary/10"
+    )}>
+      <div 
+        className={cn("p-2 flex items-center justify-between", onToggle && "cursor-pointer")}
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-2">
+          <div className={cn(
+            "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+            status === "completed" ? "bg-emerald-500/20 text-emerald-400" :
+            status === "running" ? "bg-blue-500/20 text-blue-400" :
+            "bg-secondary/50 text-muted-foreground"
+          )}>
+            {step}
+          </div>
+          <Icon className={cn(
+            "w-3.5 h-3.5",
+            status === "completed" ? "text-emerald-400" :
+            status === "running" ? "text-blue-400" :
+            "text-muted-foreground"
+          )} />
+          <span className="text-xs font-medium text-foreground/90">{title}</span>
+          {subtitle && <span className="text-[10px] text-muted-foreground">({subtitle})</span>}
         </div>
-        <Icon className="w-4 h-4 text-muted-foreground" />
-        <div>
-          <span className="text-xs font-medium text-foreground">{title}</span>
-          {subtitle && <span className="text-[10px] text-muted-foreground ml-2">{subtitle}</span>}
+        <div className="flex items-center gap-1">
+          {status === "completed" && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+          {onToggle && (expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />)}
         </div>
-        {status === "completed" && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 ml-auto" />}
       </div>
-      <div className="p-4">
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function MetricCard({ icon: Icon, label, value, subtitle }: { 
-  icon: React.ComponentType<{ className?: string }>
-  label: string
-  value: string
-  subtitle?: string
-}) {
-  return (
-    <div className="bg-secondary/30 rounded-lg p-3 border border-border/20">
-      <div className="flex items-center gap-1.5 mb-1">
-        <Icon className="w-3 h-3 text-muted-foreground" />
-        <span className="text-[10px] text-muted-foreground">{label}</span>
-      </div>
-      <p className="text-sm font-semibold text-foreground">{value}</p>
-      {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
-    </div>
-  )
-}
-
-function StatCard({ label, value, color, icon }: { 
-  label: string
-  value: string | number
-  color?: string
-  icon?: React.ReactNode
-}) {
-  return (
-    <div className="text-center p-3 bg-secondary/20 rounded-lg border border-border/20">
-      <div className="flex items-center justify-center gap-1">
-        {icon}
-        <p className={cn("text-xl font-bold", color || "text-foreground")}>{value}</p>
-      </div>
-      <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+      {expanded && <div className="px-3 pb-3">{children}</div>}
     </div>
   )
 }
 
 function MiniInfoCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-secondary/30 rounded-lg p-2.5 border border-border/20">
-      <p className="text-[10px] text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium text-foreground">{value}</p>
+    <div className="bg-secondary/30 rounded px-2 py-1.5">
+      <p className="text-[9px] text-muted-foreground">{label}</p>
+      <p className="text-xs font-medium text-foreground">{value}</p>
+    </div>
+  )
+}
+
+function StatCard({ label, value, color }: { label: string; value: string | number; color?: string; icon?: React.ReactNode }) {
+  return (
+    <div className="bg-secondary/30 rounded-lg p-2 text-center">
+      <p className="text-[9px] text-muted-foreground mb-0.5">{label}</p>
+      <p className={cn("text-sm font-bold", color || "text-foreground")}>{value}</p>
+    </div>
+  )
+}
+
+function MetricCard({ icon: Icon, label, value }: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value: string
+}) {
+  return (
+    <div className="bg-secondary/30 rounded-lg p-2 flex items-center gap-2">
+      <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+      <div className="min-w-0">
+        <p className="text-[9px] text-muted-foreground">{label}</p>
+        <p className="text-xs font-medium text-foreground truncate">{value}</p>
+      </div>
     </div>
   )
 }
 
 function DifficultyBadge({ difficulty }: { difficulty: string }) {
+  const config: Record<string, string> = {
+    S0: "bg-emerald-500/20 text-emerald-400",
+    S1: "bg-blue-500/20 text-blue-400",
+    S2: "bg-amber-500/20 text-amber-400",
+    S3: "bg-red-500/20 text-red-400",
+  }
   return (
-    <span className={cn(
-      "text-[10px] px-2 py-0.5 rounded font-medium",
-      difficulty === "S0" ? "bg-zinc-500/20 text-zinc-300" :
-      difficulty === "S1" ? "bg-blue-500/20 text-blue-300" :
-      "bg-violet-500/20 text-violet-300"
-    )}>
+    <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-mono", config[difficulty] || "bg-secondary/50 text-muted-foreground")}>
       {difficulty}
     </span>
   )
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    completed: { bg: "bg-emerald-500/20", text: "text-emerald-400", label: "Done" },
+    running: { bg: "bg-blue-500/20", text: "text-blue-400", label: "Running" },
+    pending: { bg: "bg-zinc-500/20", text: "text-zinc-400", label: "Pending" },
+    failed: { bg: "bg-red-500/20", text: "text-red-400", label: "Failed" },
+  }
+  const c = config[status] || config.pending
   return (
-    <span className={cn(
-      "text-[10px] px-2 py-0.5 rounded flex items-center gap-1",
-      status === "completed" ? "bg-emerald-500/20 text-emerald-300" :
-      status === "running" ? "bg-blue-500/20 text-blue-300" :
-      status === "failed" ? "bg-red-500/20 text-red-300" :
-      "bg-zinc-500/20 text-zinc-300"
-    )}>
-      {status === "running" && <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
-      {status === "completed" ? "完成" : status === "running" ? "运行中" : status === "failed" ? "失败" : "等待"}
+    <span className={cn("text-[9px] px-1.5 py-0.5 rounded", c.bg, c.text)}>
+      {c.label}
     </span>
   )
 }
