@@ -785,8 +785,44 @@ function ParamField({ param, value, onChange, disabled }: ParamFieldProps) {
           onChange={(e) => onChange(e.target.value)}
           placeholder={param.placeholder}
           disabled={disabled}
-          className="h-8 text-xs"
+          className="h-9 text-xs"
         />
+      )}
+      
+      {param.type === "textarea" && (
+        <Textarea
+          value={String(value || "")}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={param.placeholder || "请输入内容..."}
+          disabled={disabled}
+          className="min-h-[80px] text-xs resize-none"
+          rows={4}
+        />
+      )}
+      
+      {param.type === "image" && (
+        <div className="border-2 border-dashed border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+          <div className="flex flex-col items-center justify-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center">
+              <Image className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <p className="text-[11px] text-muted-foreground text-center">
+              {value ? "已选择图片" : "点击上传或拖放图片"}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              disabled={disabled}
+              onClick={() => {
+                // Mock: in real implementation, open file picker
+                onChange("mock_image_url.png")
+              }}
+            >
+              选择图片
+            </Button>
+          </div>
+        </div>
       )}
       
       {param.type === "number" && (
