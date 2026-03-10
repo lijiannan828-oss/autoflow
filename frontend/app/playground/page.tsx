@@ -320,7 +320,7 @@ export default function PlaygroundPage() {
   const selectedSpec = selectedNodeId ? NODE_SPECS.find((n) => n.id === selectedNodeId) : null
 
   return (
-    <div className="h-screen w-screen bg-background flex flex-col overflow-hidden">
+    <div className="h-screen w-screen bg-background flex flex-col">
       {/* Top overview header */}
       <PipelineOverviewHeader
         state={state}
@@ -332,20 +332,22 @@ export default function PlaygroundPage() {
       />
 
       {/* Main content */}
-      <div className="flex-1 flex min-h-0">
-        {/* Left: IO Panel */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <NodeIOPanel
-            nodeId={selectedNodeId}
-            nodeData={selectedNode}
-            nodeSpec={selectedSpec}
-            onRunNode={runNode}
-            onRunFromNode={runFromNode}
-            onApproveGate={approveGate}
-          />
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left: IO Panel - scrollable */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 min-h-full">
+            <NodeIOPanel
+              nodeId={selectedNodeId}
+              nodeData={selectedNode}
+              nodeSpec={selectedSpec}
+              onRunNode={runNode}
+              onRunFromNode={runFromNode}
+              onApproveGate={approveGate}
+            />
+          </div>
         </div>
 
-        {/* Right: Node flow sidebar */}
+        {/* Right: Node flow sidebar - fixed width, scrollable independently */}
         <NodeFlowSidebar
           nodes={state.nodes}
           selectedNodeId={selectedNodeId}

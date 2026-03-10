@@ -57,7 +57,7 @@ export function NodeIOPanel({
 }: NodeIOPanelProps) {
   if (!nodeId || !nodeSpec) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="min-h-[400px] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 rounded-full bg-secondary/30 flex items-center justify-center mx-auto mb-4">
             <Brain className="w-8 h-8 text-muted-foreground" />
@@ -85,9 +85,9 @@ export function NodeIOPanel({
   const [isTimelinePlaying, setIsTimelinePlaying] = useState(false)
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col">
       {/* Node header */}
-      <div className="shrink-0 border-b border-border pb-4 mb-4">
+      <div className="border-b border-border pb-4 mb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
@@ -182,8 +182,8 @@ export function NodeIOPanel({
       </div>
 
       {/* Tabs content */}
-      <Tabs defaultValue="input" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="shrink-0 w-fit">
+      <Tabs defaultValue="input" className="flex flex-col">
+        <TabsList className="w-fit">
           <TabsTrigger value="input">
             <ArrowRight className="w-3.5 h-3.5 mr-1.5" />
             输入
@@ -202,8 +202,8 @@ export function NodeIOPanel({
           </TabsTrigger>
         </TabsList>
 
-        <div className="flex-1 min-h-0 mt-4">
-          <TabsContent value="input" className="h-full m-0">
+        <div className="mt-4">
+          <TabsContent value="input" className="m-0">
             <IOContentPanel 
               type="input" 
               data={nodeData?.input} 
@@ -212,68 +212,62 @@ export function NodeIOPanel({
               isRunning={isRunning}
             />
           </TabsContent>
-          <TabsContent value="output" className="h-full m-0">
+          <TabsContent value="output" className="m-0">
             {/* 关键帧节点特殊渲染 */}
             {isKeyframeNode ? (
-              <ScrollArea className="h-full">
-                <div className="pr-4 space-y-4">
-                  <ShotGridPanel
-                    shots={mockShots}
-                    type="keyframe"
+              <div className="space-y-4">
+                <ShotGridPanel
+                  shots={mockShots}
+                  type="keyframe"
+                  isRunning={isRunning}
+                  currentShotIndex={isRunning ? Math.floor(Math.random() * 45) : undefined}
+                />
+                {/* 过程数据 */}
+                {ioSpec?.processData && ioSpec.processData.length > 0 && (
+                  <ProcessDataSection 
+                    processData={ioSpec.processData} 
+                    values={nodeData?.processData}
                     isRunning={isRunning}
-                    currentShotIndex={isRunning ? Math.floor(Math.random() * 45) : undefined}
                   />
-                  {/* 过程数据 */}
-                  {ioSpec?.processData && ioSpec.processData.length > 0 && (
-                    <ProcessDataSection 
-                      processData={ioSpec.processData} 
-                      values={nodeData?.processData}
-                      isRunning={isRunning}
-                    />
-                  )}
-                </div>
-              </ScrollArea>
+                )}
+              </div>
             ) : isVideoNode ? (
-              <ScrollArea className="h-full">
-                <div className="pr-4 space-y-4">
-                  <ShotGridPanel
-                    shots={mockShots}
-                    type="video"
+              <div className="space-y-4">
+                <ShotGridPanel
+                  shots={mockShots}
+                  type="video"
+                  isRunning={isRunning}
+                  currentShotIndex={isRunning ? Math.floor(Math.random() * 45) : undefined}
+                />
+                {/* 过程数据 */}
+                {ioSpec?.processData && ioSpec.processData.length > 0 && (
+                  <ProcessDataSection 
+                    processData={ioSpec.processData} 
+                    values={nodeData?.processData}
                     isRunning={isRunning}
-                    currentShotIndex={isRunning ? Math.floor(Math.random() * 45) : undefined}
                   />
-                  {/* 过程数据 */}
-                  {ioSpec?.processData && ioSpec.processData.length > 0 && (
-                    <ProcessDataSection 
-                      processData={ioSpec.processData} 
-                      values={nodeData?.processData}
-                      isRunning={isRunning}
-                    />
-                  )}
-                </div>
-              </ScrollArea>
+                )}
+              </div>
             ) : isAVIntegrationNode ? (
-              <div className="h-full overflow-y-auto">
-                <div className="pr-4 space-y-4">
-                  <div className="rounded-lg overflow-hidden">
-                    <MultiTrackTimeline
-                      tracks={mockTracks}
-                      totalDuration={62}
-                      currentTime={timelineTime}
-                      isPlaying={isTimelinePlaying}
-                      onTimeChange={setTimelineTime}
-                      onPlayPause={() => setIsTimelinePlaying(!isTimelinePlaying)}
-                    />
-                  </div>
-                  {/* 过程数据 */}
-                  {ioSpec?.processData && ioSpec.processData.length > 0 && (
-                    <ProcessDataSection 
-                      processData={ioSpec.processData} 
-                      values={nodeData?.processData}
-                      isRunning={isRunning}
-                    />
-                  )}
+              <div className="space-y-4">
+                <div className="rounded-lg overflow-hidden">
+                  <MultiTrackTimeline
+                    tracks={mockTracks}
+                    totalDuration={62}
+                    currentTime={timelineTime}
+                    isPlaying={isTimelinePlaying}
+                    onTimeChange={setTimelineTime}
+                    onPlayPause={() => setIsTimelinePlaying(!isTimelinePlaying)}
+                  />
                 </div>
+                {/* 过程数据 */}
+                {ioSpec?.processData && ioSpec.processData.length > 0 && (
+                  <ProcessDataSection 
+                    processData={ioSpec.processData} 
+                    values={nodeData?.processData}
+                    isRunning={isRunning}
+                  />
+                )}
               </div>
             ) : (
               <IOContentPanel 
@@ -287,10 +281,10 @@ export function NodeIOPanel({
               />
             )}
           </TabsContent>
-          <TabsContent value="thinking" className="h-full m-0">
+          <TabsContent value="thinking" className="m-0">
             <ThinkingPanel nodeData={nodeData} nodeSpec={nodeSpec} />
           </TabsContent>
-          <TabsContent value="config" className="h-full m-0">
+          <TabsContent value="config" className="m-0">
             <ConfigPanel nodeSpec={nodeSpec} />
           </TabsContent>
         </div>
@@ -377,7 +371,7 @@ function IOContentPanel({
 }) {
   if (!ioSpec || ioSpec.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="py-12 flex items-center justify-center">
         <div className="text-center">
           <FileJson className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-sm text-muted-foreground">
@@ -389,8 +383,7 @@ function IOContentPanel({
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="space-y-4 pr-4">
+    <div className="space-y-4">
         {/* Render each field based on its type */}
         {ioSpec.map((field) => (
           <FieldRenderer 
@@ -421,8 +414,7 @@ function IOContentPanel({
             </div>
           </div>
         )}
-      </div>
-    </ScrollArea>
+    </div>
   )
 }
 
