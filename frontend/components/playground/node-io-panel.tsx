@@ -253,10 +253,9 @@ export function NodeIOPanel({
                 </div>
               </ScrollArea>
             ) : isAVIntegrationNode ? (
-              <ScrollArea className="h-full">
+              <div className="h-full overflow-y-auto">
                 <div className="pr-4 space-y-4">
-                  <div className="bg-secondary/20 rounded-lg p-4">
-                    <h4 className="text-xs font-medium text-foreground mb-3">多轨时间线</h4>
+                  <div className="rounded-lg overflow-hidden">
                     <MultiTrackTimeline
                       tracks={mockTracks}
                       totalDuration={62}

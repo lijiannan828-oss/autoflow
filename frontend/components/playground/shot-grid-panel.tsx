@@ -347,14 +347,45 @@ function CandidateGridView({
                                   <Image className="w-5 h-5 text-zinc-600" />
                                 </div>
                               )}
-                              {/* 候选编号 */}
-                              <span className="absolute bottom-1 left-1 text-[9px] bg-black/60 px-1 rounded">
-                                #{candIdx + 1}
-                              </span>
+                              {/* 候选编号 + 质检分数 */}
+                              <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between">
+                                <span className="text-[9px] bg-black/60 px-1 rounded">
+                                  #{candIdx + 1}
+                                </span>
+                                {/* 每个关键帧的质检分数 */}
+                                {kf?.qcScores && kf.qcScores.length > 0 && (
+                                  <span className={cn(
+                                    "text-[9px] px-1 rounded font-medium",
+                                    kf.qcScores[0].score >= 8.5 
+                                      ? "bg-emerald-500/80 text-white" 
+                                      : kf.qcScores[0].score >= 7.5 
+                                        ? "bg-blue-500/80 text-white"
+                                        : "bg-amber-500/80 text-white"
+                                  )}>
+                                    {kf.qcScores[0].score.toFixed(1)}
+                                  </span>
+                                )}
+                              </div>
                               {/* 选中标记 */}
                               {isSelected && (
                                 <div className="absolute top-1 right-1">
                                   <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                </div>
+                              )}
+                              {/* 悬停时显示三模型评分 */}
+                              {kf?.qcScores && kf.qcScores.length > 0 && (
+                                <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-0.5 p-1">
+                                  {kf.qcScores.map((qc, qcIdx) => (
+                                    <div key={qcIdx} className="flex items-center gap-1 text-[8px]">
+                                      <span className="text-muted-foreground truncate max-w-[40px]">{qc.model.split(' ')[0]}</span>
+                                      <span className={cn(
+                                        "font-mono font-medium",
+                                        qc.score >= 8.5 ? "text-emerald-400" : qc.score >= 7.5 ? "text-blue-400" : "text-amber-400"
+                                      )}>
+                                        {qc.score.toFixed(1)}
+                                      </span>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
                             </button>
@@ -393,7 +424,7 @@ function CandidateGridView({
                 <TooltipTrigger asChild>
                   <button
                     className={cn(
-                      "w-40 h-24 rounded-lg border-2 transition-all shrink-0 relative overflow-hidden",
+                      "w-40 h-24 rounded-lg border-2 transition-all shrink-0 relative overflow-hidden group",
                       "bg-gradient-to-br from-zinc-800 to-zinc-900",
                       isSelected
                         ? "border-emerald-500 ring-2 ring-emerald-500/30"
@@ -404,18 +435,52 @@ function CandidateGridView({
                     <div className="w-full h-full flex items-center justify-center">
                       <Video className="w-6 h-6 text-zinc-600" />
                     </div>
-                    {/* 候选编号 */}
-                    <span className="absolute bottom-1 left-1 text-[9px] bg-black/60 px-1 rounded">
-                      #{candIdx + 1}
-                    </span>
+                    {/* 候选编号 + 质检分数 */}
+                    <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between">
+                      <span className="text-[9px] bg-black/60 px-1 rounded">
+                        #{candIdx + 1}
+                      </span>
+                      {/* 每个视频的质检分数 */}
+                      {video?.qcScores && video.qcScores.length > 0 && (
+                        <span className={cn(
+                          "text-[9px] px-1 rounded font-medium",
+                          video.qcScores[0].score >= 8.5 
+                            ? "bg-emerald-500/80 text-white" 
+                            : video.qcScores[0].score >= 7.5 
+                              ? "bg-blue-500/80 text-white"
+                              : "bg-amber-500/80 text-white"
+                        )}>
+                          {video.qcScores[0].score.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
                     {/* 时长 */}
-                    <span className="absolute bottom-1 right-1 text-[9px] bg-black/60 px-1 rounded">
+                    <span className="absolute top-1 left-1 text-[9px] bg-black/60 px-1 rounded">
                       {video?.duration || shot.duration}s
                     </span>
                     {/* 选中标记 */}
                     {isSelected && (
                       <div className="absolute top-1 right-1">
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                    )}
+                    {/* 悬停时显示三模型评分 */}
+                    {video?.qcScores && video.qcScores.length > 0 && (
+                      <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-center items-center gap-1 p-2">
+                        {video.qcScores.map((qc, qcIdx) => (
+                          <div key={qcIdx} className="flex items-center gap-2 text-[9px]">
+                            <span className="text-muted-foreground w-16 truncate">{qc.model}</span>
+                            <span className={cn(
+                              "font-mono font-medium",
+                              qc.score >= 8.5 ? "text-emerald-400" : qc.score >= 7.5 ? "text-blue-400" : "text-amber-400"
+                            )}>
+                              {qc.score.toFixed(1)}
+                            </span>
+                          </div>
+                        ))}
+                        <p className="text-[8px] text-muted-foreground mt-1 text-center line-clamp-2">
+                          {video.qcScores[0].reason}
+                        </p>
                       </div>
                     )}
                   </button>
@@ -585,12 +650,78 @@ export function generateMockShots(count: number = 45): ShotData[] {
           index: Math.floor(kfIdx / diffConfig.candidates),
           candidateIndex: kfIdx % diffConfig.candidates,
           prompt: prompts[idx % prompts.length],
+          // 每个关键帧的三模型质检分数
+          qcScores: [
+            {
+              model: "Gemini 3.1",
+              score: 7.5 + Math.random() * 2,
+              reason: "角色一致性良好，构图合理",
+              dimensions: [
+                { name: "角色一致性", score: 7.5 + Math.random() * 2 },
+                { name: "构图", score: 7.5 + Math.random() * 2 },
+                { name: "光影", score: 7.5 + Math.random() * 2 },
+              ],
+            },
+            {
+              model: "Claude Opus",
+              score: 7.5 + Math.random() * 2,
+              reason: "人物姿态准确，场景细节丰富",
+              dimensions: [
+                { name: "角色一致性", score: 7.5 + Math.random() * 2 },
+                { name: "构图", score: 7.5 + Math.random() * 2 },
+                { name: "光影", score: 7.5 + Math.random() * 2 },
+              ],
+            },
+            {
+              model: "GPT-5.4",
+              score: 7.5 + Math.random() * 2,
+              reason: "整体质量优秀，符合剧本描述",
+              dimensions: [
+                { name: "角色一致性", score: 7.5 + Math.random() * 2 },
+                { name: "构图", score: 7.5 + Math.random() * 2 },
+                { name: "光影", score: 7.5 + Math.random() * 2 },
+              ],
+            },
+          ],
         })
       ),
       videos: Array.from({ length: diffConfig.candidates }).map((_, vIdx) => ({
         index: 0,
         candidateIndex: vIdx,
         duration: Math.floor(Math.random() * 3) + 2,
+        // 每个视频候选的三模型质检分数
+        qcScores: [
+          {
+            model: "Gemini 3.1",
+            score: 7.5 + Math.random() * 2,
+            reason: "运动流畅，时长适当",
+            dimensions: [
+              { name: "运动流畅度", score: 7.5 + Math.random() * 2 },
+              { name: "时长准确度", score: 7.5 + Math.random() * 2 },
+              { name: "画面稳定性", score: 7.5 + Math.random() * 2 },
+            ],
+          },
+          {
+            model: "Claude Opus",
+            score: 7.5 + Math.random() * 2,
+            reason: "角色动作自然，转场平滑",
+            dimensions: [
+              { name: "运动流畅度", score: 7.5 + Math.random() * 2 },
+              { name: "时长准确度", score: 7.5 + Math.random() * 2 },
+              { name: "画面稳定性", score: 7.5 + Math.random() * 2 },
+            ],
+          },
+          {
+            model: "GPT-5.4",
+            score: 7.5 + Math.random() * 2,
+            reason: "整体效果符合预期",
+            dimensions: [
+              { name: "运动流畅度", score: 7.5 + Math.random() * 2 },
+              { name: "时长准确度", score: 7.5 + Math.random() * 2 },
+              { name: "画面稳定性", score: 7.5 + Math.random() * 2 },
+            ],
+          },
+        ],
       })),
       selectedKeyframe: Math.random() > 0.5 ? Math.floor(Math.random() * diffConfig.candidates) : undefined,
       selectedVideo: Math.random() > 0.5 ? Math.floor(Math.random() * diffConfig.candidates) : undefined,

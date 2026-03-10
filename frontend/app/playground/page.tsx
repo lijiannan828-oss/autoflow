@@ -332,9 +332,9 @@ export default function PlaygroundPage() {
       />
 
       {/* Main content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex min-h-0">
         {/* Left: IO Panel */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4">
           <NodeIOPanel
             nodeId={selectedNodeId}
             nodeData={selectedNode}

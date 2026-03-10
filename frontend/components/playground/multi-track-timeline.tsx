@@ -105,8 +105,10 @@ export function MultiTrackTimeline({
   const [internalTime, setInternalTime] = useState(currentTime)
   const [isMuted, setIsMuted] = useState(false)
   const [volume, setVolume] = useState(80)
+  const [showPreview, setShowPreview] = useState(true)
   const timelineRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // 像素/秒比例
   const pixelsPerSecond = 60 * zoom
@@ -163,6 +165,52 @@ export function MultiTrackTimeline({
 
   return (
     <div className={cn("border border-border rounded-lg bg-secondary/20 overflow-hidden", className)}>
+      {/* 成片预览区域 */}
+      {showPreview && (
+        <div className="border-b border-border bg-black">
+          <div className="relative aspect-video max-h-[240px] mx-auto">
+            {/* 视频预览占位 */}
+            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-zinc-900 to-black">
+              <div className="text-center">
+                <Film className="w-12 h-12 text-zinc-600 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">成片预览</p>
+                <p className="text-[10px] text-muted-foreground/60 mt-1">
+                  {formatTime(internalTime)} / {formatTime(totalDuration)}
+                </p>
+              </div>
+            </div>
+            
+            {/* 播放进度条 */}
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-zinc-800">
+              <div 
+                className="h-full bg-primary transition-all"
+                style={{ width: `${(internalTime / totalDuration) * 100}%` }}
+              />
+            </div>
+
+            {/* 播放按钮叠加 */}
+            <button
+              onClick={onPlayPause}
+              className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/30"
+            >
+              {isPlaying ? (
+                <Pause className="w-16 h-16 text-white/80" />
+              ) : (
+                <Play className="w-16 h-16 text-white/80 ml-2" />
+              )}
+            </button>
+
+            {/* 收起预览按钮 */}
+            <button
+              onClick={() => setShowPreview(false)}
+              className="absolute top-2 right-2 p-1 rounded bg-black/50 hover:bg-black/70 transition-colors"
+            >
+              <Maximize2 className="w-4 h-4 text-white/70" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 控制栏 */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-secondary/30">
         <div className="flex items-center gap-2">
@@ -263,6 +311,19 @@ export function MultiTrackTimeline({
             <Layers className="w-3.5 h-3.5" />
             <span>{tracks.length} 轨</span>
           </div>
+
+          {/* 预览开关 */}
+          {!showPreview && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-[10px] border-l border-border ml-3 pl-3 rounded-none"
+              onClick={() => setShowPreview(true)}
+            >
+              <Film className="w-3.5 h-3.5 mr-1" />
+              预览
+            </Button>
+          )}
         </div>
       </div>
 
