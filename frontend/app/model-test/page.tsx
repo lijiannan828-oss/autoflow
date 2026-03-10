@@ -817,7 +817,7 @@ function ParamField({ param, value, onChange, disabled }: ParamFieldProps) {
           </SelectTrigger>
           <SelectContent>
             {param.options?.map((opt) => (
-              <SelectItem key={opt} value={opt} className="text-xs">{opt}</SelectItem>
+              <SelectItem key={opt.value} value={opt.value} className="text-xs">{opt.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
