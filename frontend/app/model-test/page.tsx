@@ -715,89 +715,30 @@ function TestWindowCard({
         {/* Models input section */}
         {win.isExpanded && (
           <div className="border-b border-border/50">
-            <ScrollArea className="max-h-[280px]">
-              <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {win.models.map((mc, idx) => {
-                  const model = getModelById(mc.modelId)
-                  if (!model) return null
-                  const CategoryIcon = getCategoryIcon(model.category)
-                  
-                  return (
-                    <div key={mc.id} className="border border-border/50 rounded-lg p-3 bg-secondary/10">
-                      {/* Model header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Badge className={cn("text-[9px]", getCategoryColor(model.category))}>
-                            <CategoryIcon className="w-2.5 h-2.5 mr-0.5" />
-                            {idx + 1}
-                          </Badge>
-                        </div>
-                        {win.models.length > 1 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5"
-                            onClick={() => onRemoveModel(mc.id)}
-                            disabled={isRunning}
-                          >
-                            <X className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* Model selector */}
-                      <Select 
-                        value={mc.modelId} 
-                        onValueChange={(v) => onChangeModel(mc.id, v)} 
-                        disabled={isRunning}
-                      >
-                        <SelectTrigger className="h-7 text-xs mb-2">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ALL_MODELS.map((m) => {
-                            const Icon = getCategoryIcon(m.category)
-                            return (
-                              <SelectItem key={m.id} value={m.id} className="text-xs">
-                                <div className="flex items-center gap-2">
-                                  <Icon className="w-3 h-3" />
-                                  {m.name}
-                                </div>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
-
-                      {/* Params */}
-                      <div className="space-y-2">
-                        {model.params.slice(0, 3).map((param) => (
-                          <ParamInput
-                            key={param.key}
-                            param={param}
-                            value={mc.params[param.key]}
-                            onChange={(v) => onUpdateParam(mc.id, param.key, v)}
-                            disabled={isRunning}
-                            compact
-                          />
-                        ))}
-                        {model.params.length > 3 && (
-                          <p className="text-[9px] text-muted-foreground">
-                            +{model.params.length - 3} 更多参数...
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-
-                {/* Add model button */}
-                {win.models.length < 4 && (
+            <div className="p-3 overflow-y-auto max-h-[350px]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {win.models.map((mc, idx) => (
+                  <ModelInputCard
+                    key={mc.id}
+                    config={mc}
+                    index={idx}
+                    isRunning={isRunning}
+                    onRemove={() => onRemoveModel(mc.id)}
+                    onChangeModel={(modelId) => onChangeModel(mc.id, modelId)}
+                    onUpdateParam={(key, value) => onUpdateParam(mc.id, key, value)}
+                    canRemove={win.models.length > 1}
+                  />
+                ))}
+              </div>
+              
+              {/* Add model button - separate row */}
+              {win.models.length < 4 && (
+                <div className="mt-3">
                   <Select onValueChange={onAddModel} value="" disabled={isRunning}>
-                    <SelectTrigger className="h-full min-h-[120px] border-dashed">
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                        <Plus className="w-5 h-5" />
-                        <span className="text-xs">添加模型对比</span>
+                    <SelectTrigger className="w-full h-12 border-dashed">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground w-full">
+                        <Plus className="w-4 h-4" />
+                        <span className="text-xs">添加模型对比 ({win.models.length}/4)</span>
                       </div>
                     </SelectTrigger>
                     <SelectContent>
@@ -814,21 +755,20 @@ function TestWindowCard({
                       })}
                     </SelectContent>
                   </Select>
-                )}
-              </div>
-            </ScrollArea>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* Output section */}
-        <div className="flex-1 min-h-0">
-          <ScrollArea className="h-full max-h-[300px]">
-            <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="p-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {win.models.map((mc) => {
                 const model = getModelById(mc.modelId)
                 if (!model) return null
                 const result = win.modelResults[mc.id]
-                const CategoryIcon = getCategoryIcon(model.category)
 
                 return (
                   <ModelOutputCard
@@ -840,8 +780,123 @@ function TestWindowCard({
                 )
               })}
             </div>
-          </ScrollArea>
+          </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ============ 模型输入卡片 ============
+
+interface ModelInputCardProps {
+  config: ModelTestConfig
+  index: number
+  isRunning: boolean
+  canRemove: boolean
+  onRemove: () => void
+  onChangeModel: (modelId: string) => void
+  onUpdateParam: (key: string, value: unknown) => void
+}
+
+function ModelInputCard({
+  config,
+  index,
+  isRunning,
+  canRemove,
+  onRemove,
+  onChangeModel,
+  onUpdateParam,
+}: ModelInputCardProps) {
+  const [showAllParams, setShowAllParams] = useState(false)
+  const model = getModelById(config.modelId)
+  
+  if (!model) return null
+  
+  const CategoryIcon = getCategoryIcon(model.category)
+  const visibleParams = showAllParams ? model.params : model.params.slice(0, 3)
+  const hiddenCount = model.params.length - 3
+
+  return (
+    <div className="border border-border/50 rounded-lg p-3 bg-secondary/10">
+      {/* Model header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Badge className={cn("text-[9px]", getCategoryColor(model.category))}>
+            <CategoryIcon className="w-2.5 h-2.5 mr-0.5" />
+            {index + 1}
+          </Badge>
+        </div>
+        {canRemove && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={onRemove}
+            disabled={isRunning}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        )}
+      </div>
+
+      {/* Model selector */}
+      <Select 
+        value={config.modelId} 
+        onValueChange={onChangeModel} 
+        disabled={isRunning}
+      >
+        <SelectTrigger className="h-7 text-xs mb-2">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ALL_MODELS.map((m) => {
+            const Icon = getCategoryIcon(m.category)
+            return (
+              <SelectItem key={m.id} value={m.id} className="text-xs">
+                <div className="flex items-center gap-2">
+                  <Icon className="w-3 h-3" />
+                  {m.name}
+                </div>
+              </SelectItem>
+            )
+          })}
+        </SelectContent>
+      </Select>
+
+      {/* Params */}
+      <div className="space-y-2">
+        {visibleParams.map((param) => (
+          <ParamInput
+            key={param.key}
+            param={param}
+            value={config.params[param.key]}
+            onChange={(v) => onUpdateParam(param.key, v)}
+            disabled={isRunning}
+            compact
+          />
+        ))}
+        
+        {/* Show more/less button */}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="w-full text-[10px] text-primary hover:text-primary/80 flex items-center justify-center gap-1 py-1 hover:bg-primary/5 rounded transition-colors"
+            onClick={() => setShowAllParams(!showAllParams)}
+          >
+            {showAllParams ? (
+              <>
+                <ChevronDown className="w-3 h-3" />
+                收起参数
+              </>
+            ) : (
+              <>
+                <ChevronRight className="w-3 h-3" />
+                展开更多参数 (+{hiddenCount})
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -856,76 +911,175 @@ interface ModelOutputCardProps {
 }
 
 function ModelOutputCard({ model, result, drawCount }: ModelOutputCardProps) {
+  const [selectedResultIndex, setSelectedResultIndex] = useState<number | null>(null)
   const CategoryIcon = getCategoryIcon(model.category)
   const results = result?.results || []
-  const completedCount = results.filter(r => r.status === "completed").length
+  const completedResults = results.filter(r => r.status === "completed")
   const totalDuration = results.reduce((sum, r) => sum + (r.duration || 0), 0)
   const totalCost = results.reduce((sum, r) => sum + (r.cost || 0), 0)
+  const avgDuration = completedResults.length > 0 ? totalDuration / completedResults.length : 0
+  const avgCost = completedResults.length > 0 ? totalCost / completedResults.length : 0
+
+  const selectedResult = selectedResultIndex !== null ? results[selectedResultIndex] : null
+  const isMediaOutput = model.outputType === "image" || model.outputType === "video"
 
   return (
-    <div className="border border-border/50 rounded-lg p-3 bg-secondary/5">
+    <div className="border border-border/50 rounded-lg bg-secondary/5 flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between p-3 border-b border-border/30">
         <div className="flex items-center gap-2">
           <Badge className={cn("text-[9px]", getCategoryColor(model.category))}>
             <CategoryIcon className="w-2.5 h-2.5 mr-0.5" />
             {model.category.toUpperCase()}
           </Badge>
-          <span className="text-[10px] font-medium truncate max-w-[100px]">{model.name}</span>
+          <span className="text-[10px] font-medium truncate max-w-[120px]">{model.name}</span>
         </div>
-        {result && (
-          <div className="flex items-center gap-2 text-[9px]">
-            {result.status === "running" && (
-              <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+        {result && result.status === "running" && (
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+        )}
+      </div>
+
+      {/* Output preview area */}
+      <div className="p-3">
+        {results.length > 0 ? (
+          <>
+            {/* Media preview or text output */}
+            {isMediaOutput ? (
+              <div className="mb-3">
+                <div className={cn(
+                  "relative rounded-lg overflow-hidden bg-black/50 flex items-center justify-center",
+                  model.outputType === "image" ? "aspect-square" : "aspect-video",
+                  "min-h-[120px]"
+                )}>
+                  {selectedResult?.status === "completed" ? (
+                    <div className="text-center">
+                      {model.outputType === "image" ? (
+                        <>
+                          <Image className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
+                          <p className="text-[10px] text-muted-foreground">
+                            生成图片 #{(selectedResultIndex ?? 0) + 1}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground/60">
+                            1024 x 1024 PNG
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <Video className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
+                          <p className="text-[10px] text-muted-foreground">
+                            生成视频 #{(selectedResultIndex ?? 0) + 1}
+                          </p>
+                          <p className="text-[9px] text-muted-foreground/60">
+                            832 x 480 @ 16fps
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  ) : selectedResult?.status === "running" ? (
+                    <div className="text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-400 mx-auto mb-2" />
+                      <p className="text-[10px] text-muted-foreground">生成中...</p>
+                    </div>
+                  ) : selectedResult?.status === "error" ? (
+                    <div className="text-center">
+                      <AlertCircle className="w-6 h-6 text-red-400 mx-auto mb-2" />
+                      <p className="text-[10px] text-red-400">{selectedResult.error}</p>
+                    </div>
+                  ) : (
+                    <div className="text-center">
+                      <Sparkles className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
+                      <p className="text-[10px] text-muted-foreground">点击下方选择查看</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              // Text output
+              selectedResult?.status === "completed" && selectedResult.output && (
+                <div className="mb-3 p-2 bg-secondary/30 rounded text-[10px] text-foreground/80 max-h-[80px] overflow-y-auto font-mono">
+                  {typeof selectedResult.output === "string" 
+                    ? selectedResult.output 
+                    : JSON.stringify(selectedResult.output, null, 2)
+                  }
+                </div>
+              )
             )}
-            {result.status === "completed" && (
-              <>
-                <span className="text-muted-foreground">{formatDuration(totalDuration)}</span>
-                <span className="text-amber-400">{formatCost(totalCost)}</span>
-              </>
-            )}
+
+            {/* Results grid - selectable */}
+            <div className={cn(
+              "grid gap-1.5",
+              drawCount <= 5 ? "grid-cols-5" : "grid-cols-5 sm:grid-cols-10"
+            )}>
+              {results.map((r, idx) => (
+                <TooltipProvider key={idx}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedResultIndex(idx)}
+                        className={cn(
+                          "h-8 rounded flex items-center justify-center text-[9px] transition-all border",
+                          r.status === "pending" && "bg-secondary/30 text-muted-foreground border-transparent",
+                          r.status === "running" && "bg-blue-500/20 text-blue-400 border-blue-500/30 animate-pulse",
+                          r.status === "completed" && "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
+                          r.status === "error" && "bg-red-500/10 text-red-400 border-red-500/30",
+                          selectedResultIndex === idx && "ring-2 ring-primary ring-offset-1 ring-offset-background"
+                        )}
+                      >
+                        {r.status === "pending" && <span>#{idx + 1}</span>}
+                        {r.status === "running" && <Loader2 className="w-3 h-3 animate-spin" />}
+                        {r.status === "completed" && <Check className="w-3 h-3" />}
+                        {r.status === "error" && <AlertCircle className="w-3 h-3" />}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[200px]">
+                      <div className="text-[10px] space-y-1">
+                        <p className="font-medium">#{idx + 1} - {r.status === "completed" ? "完成" : r.status === "running" ? "运行中" : r.status === "error" ? "失败" : "待执行"}</p>
+                        {r.duration != null && <p>耗时: {formatDuration(r.duration)}</p>}
+                        {r.cost != null && <p>成本: {formatCost(r.cost)}</p>}
+                        {r.seed != null && <p>Seed: {r.seed}</p>}
+                        {r.error && <p className="text-red-400">{r.error}</p>}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className={cn(
+            "flex items-center justify-center text-[10px] text-muted-foreground border border-dashed border-border/50 rounded",
+            isMediaOutput ? "aspect-video min-h-[100px]" : "h-20"
+          )}>
+            <div className="text-center">
+              <Sparkles className="w-5 h-5 text-muted-foreground/50 mx-auto mb-1" />
+              点击运行查看输出
+            </div>
           </div>
         )}
       </div>
 
-      {/* Results grid */}
-      {results.length > 0 ? (
-        <div className="grid grid-cols-5 gap-1">
-          {results.map((r, idx) => (
-            <TooltipProvider key={idx}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div
-                    className={cn(
-                      "h-7 rounded flex items-center justify-center text-[9px] transition-all",
-                      r.status === "pending" && "bg-secondary/30 text-muted-foreground",
-                      r.status === "running" && "bg-blue-500/20 text-blue-400 animate-pulse",
-                      r.status === "completed" && "bg-emerald-500/20 text-emerald-400",
-                      r.status === "error" && "bg-red-500/20 text-red-400"
-                    )}
-                  >
-                    {r.status === "pending" && <span>#{idx + 1}</span>}
-                    {r.status === "running" && <Loader2 className="w-3 h-3 animate-spin" />}
-                    {r.status === "completed" && <Check className="w-3 h-3" />}
-                    {r.status === "error" && <AlertCircle className="w-3 h-3" />}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[200px]">
-                  <div className="text-[10px] space-y-1">
-                    <p>#{idx + 1} - {r.status}</p>
-                    {r.duration && <p>耗时: {formatDuration(r.duration)}</p>}
-                    {r.cost && <p>成本: {formatCost(r.cost)}</p>}
-                    {r.seed && <p>Seed: {r.seed}</p>}
-                    {r.error && <p className="text-red-400">{r.error}</p>}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          ))}
-        </div>
-      ) : (
-        <div className="h-16 flex items-center justify-center text-[10px] text-muted-foreground border border-dashed border-border/50 rounded">
-          点击运行查看输出
+      {/* Stats footer */}
+      {result && (result.status === "completed" || completedResults.length > 0) && (
+        <div className="px-3 py-2 border-t border-border/30 bg-secondary/20">
+          <div className="grid grid-cols-4 gap-2 text-[9px]">
+            <div>
+              <p className="text-muted-foreground">完成</p>
+              <p className="font-medium text-foreground">{completedResults.length}/{results.length}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">总耗时</p>
+              <p className="font-medium text-foreground">{formatDuration(totalDuration)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">总成本</p>
+              <p className="font-medium text-amber-400">{formatCost(totalCost)}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground">平均</p>
+              <p className="font-medium text-foreground">{formatDuration(avgDuration)}</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
