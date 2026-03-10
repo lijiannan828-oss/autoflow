@@ -23,6 +23,7 @@ export interface PlaygroundNodeData {
   thinking?: string // Agent reasoning
   input?: Record<string, unknown>
   output?: Record<string, unknown>
+  processData?: Record<string, unknown> // Process metadata
   error?: string
   retryCount?: number
   isConnectedToPrev?: boolean // Is connected to upstream
@@ -267,9 +268,23 @@ export default function PlaygroundPage() {
     [state.nodes, runFromNode]
   )
 
-  // Pause/Resume
+  // Pause/Resume global
   const togglePause = useCallback(() => {
     setState((prev) => ({ ...prev, isPaused: !prev.isPaused }))
+  }, [])
+
+  // Pause single node
+  const pauseNode = useCallback((nodeId: string) => {
+    setState((prev) => ({
+      ...prev,
+      nodes: {
+        ...prev.nodes,
+        [nodeId]: {
+          ...prev.nodes[nodeId],
+          status: "paused",
+        },
+      },
+    }))
   }, [])
 
   // Reset
@@ -335,6 +350,8 @@ export default function PlaygroundPage() {
           currentNodeId={state.currentNodeId}
           onSelectNode={setSelectedNodeId}
           onToggleConnection={toggleNodeConnection}
+          onRunNode={runNode}
+          onPauseNode={pauseNode}
         />
       </div>
 
@@ -382,22 +399,67 @@ CRF: ${spec.params.find((p) => p.key === "crf")?.defaultValue || 23}
 }
 
 function generateMockInput(spec: NodeSpec): Record<string, unknown> {
-  if (spec.id === "N01") {
-    return {
-      script_text: "[剧本文本 - 约5万字]",
-      narrative_arc: "三幕结构",
-      character_presets: "主角: 林晓, 配角: 张伟, 李芳",
-    }
-  }
-  if (spec.id === "N02") {
-    return {
-      parsed_script: { characters: 5, locations: 8, episodes: 30 },
+  const mockInputs: Record<string, Record<string, unknown>> = {
+    N01: {
+      file_name: "都市情缘_完整剧本.txt",
+      file_size: "52.3 KB",
+      upload_time: new Date().toLocaleString("zh-CN"),
+    },
+    N02: {
       episode_number: 1,
-    }
+      parsed_script_summary: "角色数: 5, 场景数: 8",
+    },
+    N03: {
+      shot_count: 45,
+    },
+    N04: {
+      qc_result_summary: "通过质检，加权分数 8.65",
+      issue_count: 2,
+    },
+    N05: {
+      frozen_shot_count: 45,
+    },
+    N06: {
+      character_count: 5,
+      location_count: 8,
+      prop_count: 12,
+    },
+    N07: {
+      art_plan_summary: "5 角色 × 4 候选 + 8 场景 × 3 变体 + 12 道具",
+    },
+    N07b: {
+      character_count: 5,
+      voice_requirements: "中文普通话，年轻都市风格",
+    },
+    N08: {
+      pending_assets_count: 44,
+    },
+    N10: {
+      shot_count: 45,
+      difficulty_distribution: "S0: 15, S1: 25, S2: 5",
+      current_shot: "shot_001",
+      visual_prompt: "林晓站在咖啡馆门口，阳光从身后照来...",
+      frozen_asset_refs: ["角色基线图", "场景参考图"],
+    },
+    N14: {
+      frozen_keyframes: ["kf_001", "kf_002", "kf_003"],
+      shot_spec_summary: "时长: 3.5s, 运镜: 推镜头",
+    },
+    N20: {
+      frozen_video_count: 45,
+      dialogue_line_count: 120,
+      bgm_requirements: "都市轻快风格",
+    },
+    N23: {
+      av_multitrack: "5轨音视频数据",
+      shot_data: { total: 45, duration: "62s" },
+    },
+    N26: {
+      final_episode: { id: "ep_001", duration: "62s" },
+      distribution_config: { platforms: ["TikTok", "Feishu"] },
+    },
   }
-  return {
-    upstream_output: `来自 ${spec.dependsOn.join(", ")} 的输出`,
-  }
+  return mockInputs[spec.id] || { upstream_output: `来自 ${spec.dependsOn.join(", ")} 的输出` }
 }
 
 function generateMockOutput(spec: NodeSpec): Record<string, unknown> {

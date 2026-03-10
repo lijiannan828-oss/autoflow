@@ -152,6 +152,41 @@
   100% { background-position: 100% 50%; }
 }
 
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { 
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4),
+                0 0 20px rgba(59, 130, 246, 0.2);
+  }
+  50% { 
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1),
+                0 0 40px rgba(59, 130, 246, 0.3);
+  }
+}
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes data-flow {
+  0% { 
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  50% { 
+    opacity: 1;
+  }
+  100% { 
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
 .animate-breathe {
   animation: breathe 2s ease-in-out infinite;
 }
@@ -160,4 +195,84 @@
   background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
   background-size: 200% 100%;
   animation: flow 1.5s linear infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.animate-scan-line {
+  animation: scan-line 2s ease-in-out infinite;
+}
+
+.animate-data-flow {
+  animation: data-flow 1.5s ease-in-out infinite;
+}
+
+/* Running node card enhanced effect */
+.node-running {
+  position: relative;
+  overflow: hidden;
+}
+
+.node-running::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+  pointer-events: none;
+}
+
+.node-running::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+  animation: scan-line 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Connection line flow effect */
+.connection-flowing {
+  position: relative;
+}
+
+.connection-flowing::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background: #3b82f6;
+  border-radius: 50%;
+  animation: data-flow 1s ease-in-out infinite;
+}
+
+/* Gradient conic for pie charts */
+.bg-gradient-conic {
+  background: conic-gradient(
+    #10B981 0deg 120deg,
+    #3B82F6 120deg 240deg,
+    #F59E0B 240deg 360deg
+  );
 }
