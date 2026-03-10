@@ -22,7 +22,19 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { PipelineExecutionState } from "@/app/playground/page"
 import { NODE_SPECS, STAGE_GROUPS } from "@/lib/node-specs"
-import { useState } from "react"
+import { useState, useMemo } from "react"
+
+// QC 节点 ID 列表
+const QC_NODE_IDS = ["N03", "N11", "N12", "N15", "N16"]
+
+// QC 维度配置
+const QC_DIMENSIONS = {
+  N03: { name: "分镜质检", dimensions: ["连贯性", "角色一致性", "场景描述", "节奏感", "情感表达"] },
+  N11: { name: "关键帧质检", dimensions: ["角色一致性", "构图", "光影", "清晰度", "风格统一"] },
+  N12: { name: "关键帧批量质检", dimensions: ["整体一致性", "风格统一", "光线连贯", "角色稳定"] },
+  N15: { name: "视频质检", dimensions: ["运动流畅度", "时长准确度", "画面稳定性", "转场自然度"] },
+  N16: { name: "视频节奏质检", dimensions: ["节奏匹配", "时长偏差", "转场流畅", "整体协调"] },
+}
 
 interface PipelineOverviewHeaderProps {
   state: PipelineExecutionState
@@ -42,6 +54,49 @@ export function PipelineOverviewHeader({
   onPause,
 }: PipelineOverviewHeaderProps) {
   const [showBreakdown, setShowBreakdown] = useState(false)
+  const [showQCDetails, setShowQCDetails] = useState(false)
+
+  // Calculate QC details by node and dimension
+  const qcDetails = useMemo(() => {
+    return QC_NODE_IDS.map((nodeId) => {
+      const nodeData = state.nodes[nodeId]
+      const config = QC_DIMENSIONS[nodeId as keyof typeof QC_DIMENSIONS]
+      const score = nodeData?.qualityScore
+
+      // Generate mock dimension scores if node is completed
+      const dimensions = config.dimensions.map((dim) => ({
+        name: dim,
+        score: nodeData?.status === "completed" ? 7.5 + Math.random() * 2 : null,
+      }))
+
+      return {
+        nodeId,
+        name: config.name,
+        overallScore: score,
+        status: nodeData?.status || "idle",
+        dimensions,
+      }
+    })
+  }, [state.nodes])
+
+  // Calculate overall dimension averages
+  const dimensionAverages = useMemo(() => {
+    const allDimensions: Record<string, number[]> = {}
+    qcDetails.forEach((qc) => {
+      qc.dimensions.forEach((dim) => {
+        if (dim.score != null) {
+          if (!allDimensions[dim.name]) allDimensions[dim.name] = []
+          allDimensions[dim.name].push(dim.score)
+        }
+      })
+    })
+
+    return Object.entries(allDimensions).map(([name, scores]) => ({
+      name,
+      avgScore: scores.reduce((a, b) => a + b, 0) / scores.length,
+      count: scores.length,
+    }))
+  }, [qcDetails])
 
   // Calculate stats by stage
   const stageStats = STAGE_GROUPS.map((group) => {
@@ -131,6 +186,8 @@ export function PipelineOverviewHeader({
                     ? "text-amber-400"
                     : undefined
             }
+            onClick={() => setShowQCDetails((v) => !v)}
+            hasDropdown
           />
           <MetricItem
             icon={RotateCcw}
@@ -240,6 +297,115 @@ export function PipelineOverviewHeader({
                     </p>
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* QC Details dropdown */}
+      {showQCDetails && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50 w-[700px] bg-card border border-border rounded-lg shadow-xl p-4 max-h-[70vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-medium">质检详情</h3>
+              <p className="text-[10px] text-muted-foreground">所有质检环节各维度评分</p>
+            </div>
+            <button
+              onClick={() => setShowQCDetails(false)}
+              className="text-muted-foreground hover:text-foreground text-xs"
+            >
+              关闭
+            </button>
+          </div>
+
+          {/* Overall dimension averages */}
+          {dimensionAverages.length > 0 && (
+            <div className="mb-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
+              <h4 className="text-xs font-medium mb-2 text-primary">各维度综合均分</h4>
+              <div className="flex flex-wrap gap-2">
+                {dimensionAverages.map((dim) => (
+                  <div
+                    key={dim.name}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-lg text-[11px] font-medium",
+                      dim.avgScore >= 9
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : dim.avgScore >= 8
+                          ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                          : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                    )}
+                  >
+                    {dim.name}: {dim.avgScore.toFixed(2)}
+                    <span className="text-[9px] opacity-60 ml-1">({dim.count}次)</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* QC nodes breakdown */}
+          <div className="space-y-3">
+            {qcDetails.map((qc) => (
+              <div
+                key={qc.nodeId}
+                className={cn(
+                  "p-3 rounded-lg border",
+                  qc.status === "completed"
+                    ? "bg-secondary/30 border-border"
+                    : "bg-secondary/10 border-border/50"
+                )}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-muted-foreground">{qc.nodeId}</span>
+                    <span className="text-xs font-medium">{qc.name}</span>
+                    {qc.status !== "completed" && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-500/20 text-zinc-400">
+                        {qc.status === "idle" ? "未运行" : qc.status === "running" ? "运行中" : qc.status}
+                      </span>
+                    )}
+                  </div>
+                  {qc.overallScore != null && (
+                    <span
+                      className={cn(
+                        "text-sm font-bold",
+                        qc.overallScore >= 9
+                          ? "text-emerald-400"
+                          : qc.overallScore >= 8
+                            ? "text-foreground"
+                            : "text-amber-400"
+                      )}
+                    >
+                      {qc.overallScore.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                {qc.status === "completed" && (
+                  <div className="grid grid-cols-5 gap-2">
+                    {qc.dimensions.map((dim) => (
+                      <div key={dim.name} className="text-center">
+                        <p className="text-[9px] text-muted-foreground mb-1 truncate" title={dim.name}>
+                          {dim.name}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-xs font-medium",
+                            dim.score != null && dim.score >= 9
+                              ? "text-emerald-400"
+                              : dim.score != null && dim.score >= 8
+                                ? "text-foreground"
+                                : dim.score != null
+                                  ? "text-amber-400"
+                                  : "text-muted-foreground"
+                          )}
+                        >
+                          {dim.score != null ? dim.score.toFixed(1) : "-"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

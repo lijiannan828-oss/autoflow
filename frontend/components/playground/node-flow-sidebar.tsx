@@ -3,14 +3,13 @@
 import { cn } from "@/lib/utils"
 import { NODE_SPECS, STAGE_GROUPS, getCategoryColor, getCategoryLabel } from "@/lib/node-specs"
 import type { PlaygroundNodeData, PlaygroundNodeStatus } from "@/app/playground/page"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { User, Check, X, Loader2, Pause, Clock, Play, Square } from "lucide-react"
+import { User, Check, X, Loader2, Pause, Clock, Play, Link2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 interface NodeFlowSidebarProps {
@@ -46,15 +45,15 @@ export function NodeFlowSidebar({
   onPauseNode,
 }: NodeFlowSidebarProps) {
   return (
-    <aside className="w-72 border-l border-border bg-card/30 flex flex-col shrink-0">
+    <aside className="w-72 border-l border-border bg-card/30 flex flex-col shrink-0 h-full overflow-hidden">
       {/* Header */}
-      <div className="h-10 px-3 flex items-center justify-between border-b border-border/50">
+      <div className="h-10 px-3 flex items-center justify-between border-b border-border/50 shrink-0">
         <span className="text-xs font-medium text-foreground">节点流程图</span>
         <span className="text-[10px] text-muted-foreground">26 节点</span>
       </div>
 
-      {/* Nodes list */}
-      <ScrollArea className="flex-1">
+      {/* Nodes list - scrollable */}
+      <div className="flex-1 overflow-y-auto">
         <div className="p-2 space-y-4">
           {STAGE_GROUPS.map((group) => (
             <div key={group.id}>
@@ -93,26 +92,55 @@ export function NodeFlowSidebar({
                                   onToggleConnection(nodeId, "prev")
                                 }}
                                 className={cn(
-                                  "w-full h-4 flex items-center justify-center cursor-pointer hover:bg-secondary/30 rounded transition-colors",
+                                  "w-full h-6 flex items-center justify-center cursor-pointer rounded transition-all group/conn",
+                                  nodeData.isConnectedToPrev 
+                                    ? "hover:bg-red-500/10" 
+                                    : "hover:bg-emerald-500/10",
                                 )}
                               >
-                                <div
-                                  className={cn(
-                                    "w-px h-full transition-all relative",
-                                    nodeData.isConnectedToPrev
-                                      ? isPrevRunning
-                                        ? "bg-blue-500/70"
-                                        : isPrevCompleted
-                                          ? "bg-emerald-500/70"
-                                          : "bg-zinc-500/50"
-                                      : "bg-zinc-700/30 border-l border-dashed border-zinc-600"
-                                  )}
-                                >
-                                  {/* Flow animation when running */}
-                                  {nodeData.isConnectedToPrev && isPrevRunning && (
-                                    <div className="absolute inset-0 animate-flow" />
-                                  )}
-                                </div>
+                                {nodeData.isConnectedToPrev ? (
+                                  // Connected state - solid line with color
+                                  <div className="relative flex flex-col items-center h-full w-8">
+                                    <div
+                                      className={cn(
+                                        "w-0.5 h-full rounded-full transition-all",
+                                        isPrevRunning
+                                          ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                                          : isPrevCompleted
+                                            ? "bg-emerald-500"
+                                            : "bg-zinc-400"
+                                      )}
+                                    />
+                                    {/* Flow dots animation when running */}
+                                    {isPrevRunning && (
+                                      <>
+                                        <div className="absolute top-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
+                                        <div className="absolute top-1/2 w-1 h-1 rounded-full bg-blue-400 animate-pulse" />
+                                      </>
+                                    )}
+                                    {/* Disconnect hint on hover */}
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/conn:opacity-100 transition-opacity">
+                                      <div className="w-4 h-4 rounded-full bg-red-500/80 flex items-center justify-center">
+                                        <X className="w-2.5 h-2.5 text-white" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  // Disconnected state - dashed line with gap indicator
+                                  <div className="relative flex flex-col items-center h-full w-8">
+                                    <div className="w-px h-2 bg-zinc-600/50" />
+                                    <div className="w-4 h-4 rounded-full border-2 border-dashed border-zinc-600/50 flex items-center justify-center my-0.5">
+                                      <div className="w-1 h-1 rounded-full bg-zinc-600/50" />
+                                    </div>
+                                    <div className="w-px h-2 bg-zinc-600/50" />
+                                    {/* Connect hint on hover */}
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/conn:opacity-100 transition-opacity">
+                                      <div className="w-4 h-4 rounded-full bg-emerald-500/80 flex items-center justify-center">
+                                        <Link2 className="w-2.5 h-2.5 text-white" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent side="left" className="text-[10px]">
@@ -265,7 +293,7 @@ export function NodeFlowSidebar({
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </aside>
   )
 }
