@@ -12,8 +12,8 @@ export function middleware(request: NextRequest) {
   }
 
   // Also allow existing admin/review/tasks routes (legacy, no auth gate yet)
-  // TODO: Remove /agents from whitelist after preview is done
-  if (pathname.startsWith("/admin") || pathname.startsWith("/review") || pathname.startsWith("/tasks") || pathname.startsWith("/agents")) {
+  // TODO: Remove /agents and /preview from whitelist after preview is done
+  if (pathname.startsWith("/admin") || pathname.startsWith("/review") || pathname.startsWith("/tasks") || pathname.startsWith("/agents") || pathname.startsWith("/preview")) {
     return NextResponse.next()
   }
 
