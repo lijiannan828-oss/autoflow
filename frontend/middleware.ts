@@ -12,7 +12,8 @@ export function middleware(request: NextRequest) {
   }
 
   // Also allow existing admin/review/tasks routes (legacy, no auth gate yet)
-  if (pathname.startsWith("/admin") || pathname.startsWith("/review") || pathname.startsWith("/tasks")) {
+  // Also allow playground for quick debugging without auth
+  if (pathname.startsWith("/admin") || pathname.startsWith("/review") || pathname.startsWith("/tasks") || pathname.startsWith("/playground")) {
     return NextResponse.next()
   }
 
