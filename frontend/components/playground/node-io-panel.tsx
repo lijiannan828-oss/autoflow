@@ -75,14 +75,18 @@ export function NodeIOPanel({
 
   // 特殊节点判断
   const isKeyframeNode = ["N10", "N11", "N12", "N13"].includes(nodeId)
-  const isVideoNode = ["N14", "N15", "N16", "N16b", "N17"].includes(nodeId)
-  const isAVIntegrationNode = nodeId === "N20" || nodeId === "N21" || nodeId === "N23"
+  const isVideoNode = ["N14", "N15", "N16", "N16b", "N17", "N18", "N19"].includes(nodeId)
+  // N20 视听整合, N21 视听审核, N22 视听定稿, N23 成片合成, N24 成片终审, N25 成片定稿
+  const isAVIntegrationNode = ["N20", "N21", "N22", "N23", "N24", "N25"].includes(nodeId)
 
   // Mock 数据
   const mockShots = useMemo(() => generateMockShots(45), [])
   const mockTracks = useMemo(() => generateMockTracks(62), [])
   const [timelineTime, setTimelineTime] = useState(0)
   const [isTimelinePlaying, setIsTimelinePlaying] = useState(false)
+  
+  // 预览 mock 数据模式 - 即使节点没有运行也可以查看样式
+  const [showMockPreview, setShowMockPreview] = useState(true)
 
   return (
     <div className="flex flex-col">
@@ -182,8 +186,9 @@ export function NodeIOPanel({
       </div>
 
       {/* Tabs content */}
-      <Tabs defaultValue="input" className="flex flex-col">
-        <TabsList className="w-fit">
+      <Tabs defaultValue="output" className="flex flex-col">
+        <div className="flex items-center justify-between mb-2">
+          <TabsList className="w-fit">
           <TabsTrigger value="input">
             <ArrowRight className="w-3.5 h-3.5 mr-1.5" />
             输入
@@ -201,6 +206,20 @@ export function NodeIOPanel({
             配置
           </TabsTrigger>
         </TabsList>
+          
+          {/* Mock 预览开关 */}
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showMockPreview}
+                onChange={(e) => setShowMockPreview(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-border"
+              />
+              显示 Mock 数据预览
+            </label>
+          </div>
+        </div>
 
         <div className="mt-4">
           <TabsContent value="input" className="m-0">
@@ -272,12 +291,13 @@ export function NodeIOPanel({
             ) : (
               <IOContentPanel 
                 type="output" 
-                data={nodeData?.output} 
+                data={nodeData?.output || (showMockPreview ? generateMockOutputForNode(nodeId, nodeSpec) : undefined)} 
                 ioSpec={ioSpec?.output}
                 nodeSpec={nodeSpec}
                 isRunning={isRunning}
                 processData={ioSpec?.processData}
-                processDataValues={nodeData?.processData}
+                processDataValues={nodeData?.processData || (showMockPreview ? generateMockProcessDataForNode(nodeId) : undefined)}
+                showMockPreview={showMockPreview && !nodeData?.output}
               />
             )}
           </TabsContent>
@@ -360,6 +380,7 @@ function IOContentPanel({
   isRunning,
   processData,
   processDataValues,
+  showMockPreview,
 }: {
   type: "input" | "output"
   data?: Record<string, unknown>
@@ -368,6 +389,7 @@ function IOContentPanel({
   isRunning?: boolean
   processData?: IOFieldSpec[]
   processDataValues?: Record<string, unknown>
+  showMockPreview?: boolean
 }) {
   if (!ioSpec || ioSpec.length === 0) {
     return (
@@ -384,6 +406,14 @@ function IOContentPanel({
 
   return (
     <div className="space-y-4">
+        {/* Mock 预览提示 */}
+        {showMockPreview && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400 text-xs">
+            <AlertTriangle className="w-4 h-4" />
+            <span>当前显示的是 Mock 数据预览，用于确认样式布局。实际运行后将显示真实数据。</span>
+          </div>
+        )}
+        
         {/* Render each field based on its type */}
         {ioSpec.map((field) => (
           <FieldRenderer 
@@ -1133,4 +1163,123 @@ function ConfigPanel({ nodeSpec }: { nodeSpec: NodeSpec }) {
       </div>
     </ScrollArea>
   )
+}
+
+// Mock 数据生成函数 - 用于预览样式
+function generateMockOutputForNode(nodeId: string, nodeSpec: NodeSpec): Record<string, unknown> {
+  const mockOutputs: Record<string, Record<string, unknown>> = {
+    N01: {
+      world_setting: { genre: "都市爱情", era: "现代", style: "写实" },
+      character_registry: [
+        { 角色名: "林晓", 外貌描述: "25岁，长发，清秀" },
+        { 角色名: "张伟", 外貌描述: "28岁，短发，帅气" },
+      ],
+      location_registry: [
+        { 场景名: "咖啡馆", 描述: "现代简约风格的咖啡厅" },
+      ],
+      episode_skeletons: "共 30 集",
+    },
+    N03: {
+      radar_scores: { weighted_score: 8.65 },
+      weighted_score: 8.65,
+      decision: ["PASS", "质检通过"],
+      issues: [
+        { 维度: "连贯性", 问题描述: "第3镜与第4镜转场略显突兀", 严重程度: "低" },
+        { 维度: "角色一致性", 问题描述: "主角服装描述略有差异", 严重程度: "中" },
+      ],
+      model_comparison: [
+        { 模型: "Gemini 3.1", 分数: 8.7, 细分: { 连贯性: 8.8, 角色一致性: 8.5, 场景描述: 8.9, 节奏感: 8.6, 情感表达: 8.7 } },
+        { 模型: "Claude Opus", 分数: 8.5, 细分: { 连贯性: 8.4, 角色一致性: 8.6, 场景描述: 8.5, 节奏感: 8.4, 情感表达: 8.6 } },
+        { 模型: "GPT-5.4", 分数: 8.7, 细分: { 连贯性: 8.7, 角色一致性: 8.7, 场景描述: 8.8, 节奏感: 8.5, 情感表达: 8.8 } },
+      ],
+      dimension_scores: [
+        { 维度: "连贯性", 分数: 8.63, 权重: "20%" },
+        { 维度: "角色一致性", 分数: 8.60, 权重: "25%" },
+        { 维度: "场景描述", 分数: 8.73, 权重: "20%" },
+        { 维度: "节奏感", 分数: 8.50, 权重: "15%" },
+        { 维度: "情感表达", 分数: 8.70, 权重: "20%" },
+      ],
+    },
+    N11: {
+      radar_scores: { weighted_score: 8.5 },
+      model_comparison: [
+        { 模型: "Gemini 3.1", 分数: 8.6 },
+        { 模型: "Claude Opus", 分数: 8.4 },
+        { 模型: "GPT-5.4", 分数: 8.5 },
+      ],
+      selected_candidate: "候选 2",
+      decision: ["PASS"],
+      dimension_scores: [
+        { 维度: "角色一致性", 分数: 8.40, 权重: "30%" },
+        { 维度: "构图", 分数: 8.60, 权重: "20%" },
+        { 维度: "光影", 分数: 8.50, 权重: "20%" },
+        { 维度: "清晰度", 分数: 8.40, 权重: "15%" },
+        { 维度: "风格统一", 分数: 8.60, 权重: "15%" },
+      ],
+    },
+    N15: {
+      radar_scores: { weighted_score: 8.4 },
+      model_comparison: [
+        { 模型: "Gemini 3.1", 分数: 8.5 },
+        { 模型: "Claude Opus", 分数: 8.3 },
+        { 模型: "GPT-5.4", 分数: 8.4 },
+      ],
+      selected_candidate: "候选 1",
+      decision: ["PASS"],
+      dimension_scores: [
+        { 维度: "运动流畅度", 分数: 8.50, 权重: "30%" },
+        { 维度: "时长准确度", 分数: 8.30, 权重: "25%" },
+        { 维度: "画面稳定性", 分数: 8.40, 权重: "25%" },
+        { 维度: "转场自然度", 分数: 8.40, 权重: "20%" },
+      ],
+    },
+  }
+
+  // 如果是 QC 节点，添加通用的质检数据结构
+  if (nodeSpec.isQC && !mockOutputs[nodeId]) {
+    return {
+      weighted_score: 8.5,
+      decision: ["PASS", "质检通过"],
+      model_comparison: [
+        { 模型: "Gemini 3.1", 分数: 8.6 },
+        { 模型: "Claude Opus", 分数: 8.4 },
+        { 模型: "GPT-5.4", 分数: 8.5 },
+      ],
+      dimension_scores: nodeSpec.qcConfig?.dimensions.map(d => ({
+        维度: d.label,
+        分数: (7.5 + Math.random() * 2).toFixed(2),
+        权重: `${(d.weight * 100).toFixed(0)}%`,
+      })) || [],
+    }
+  }
+
+  return mockOutputs[nodeId] || {}
+}
+
+function generateMockProcessDataForNode(nodeId: string): Record<string, unknown> {
+  const mockData: Record<string, Record<string, unknown>> = {
+    N03: {
+      voting_models: "gemini-3.1-pro, claude-opus-4-6, gpt-5.4",
+      duration_s: "15.2",
+      cost_cny: "2.10",
+      reject_count: 0,
+    },
+    N11: {
+      qc_tier: "T2",
+      voting_models: "gemini-3.1-pro, claude-opus-4-6",
+      weighted_score: "8.65",
+      threshold: "8.0",
+      duration_s: "12.5",
+      cost_cny: "1.80",
+    },
+    N15: {
+      qc_tier: "T2",
+      voting_models: "gemini-3.1-pro, claude-opus-4-6, gpt-5.4",
+      weighted_score: "8.45",
+      threshold: "8.0",
+      duration_s: "25.0",
+      cost_cny: "3.50",
+    },
+  }
+  return mockData[nodeId] || {}
 }
