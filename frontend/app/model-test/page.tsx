@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { ALL_MODELS, MODEL_CATEGORIES, getModelById, type ModelSpec, type ParamSpec } from "@/lib/model-specs"
 import { Button } from "@/components/ui/button"
@@ -29,7 +29,6 @@ import {
   Play,
   Square,
   Copy,
-  Trash2,
   Clock,
   DollarSign,
   Cpu,
@@ -50,33 +49,46 @@ import {
 
 // ============ 类型定义 ============
 
-interface TestWindow {
+// 单个模型的测试配置
+interface ModelTestConfig {
   id: string
   modelId: string
   params: Record<string, unknown>
-  drawCount: number // 抽卡次数 1-10
-  status: "idle" | "running" | "completed" | "error"
-  results: TestResult[]
-  startTime?: number
-  endTime?: number
-  isExpanded: boolean
-  isMinimized: boolean
 }
 
-interface TestResult {
+// 单个模型的测试结果
+interface ModelTestResult {
+  modelId: string
+  results: SingleResult[]
+  status: "idle" | "running" | "completed" | "error"
+  startTime?: number
+  endTime?: number
+}
+
+interface SingleResult {
   index: number
   status: "pending" | "running" | "completed" | "error"
   output?: string | Record<string, unknown>
-  duration?: number // 毫秒
-  cost?: number // 元
+  duration?: number
+  cost?: number
   error?: string
   seed?: number
+}
+
+interface TestWindow {
+  id: string
+  models: ModelTestConfig[] // 最多 4 个模型
+  drawCount: number
+  modelResults: Record<string, ModelTestResult> // modelConfigId -> result
+  isExpanded: boolean
+  isMinimized: boolean
+  globalStatus: "idle" | "running" | "completed"
 }
 
 // ============ 工具函数 ============
 
 function generateId() {
-  return `win_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  return `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 }
 
 function getDefaultParams(model: ModelSpec): Record<string, unknown> {
@@ -114,7 +126,7 @@ function getCategoryColor(category: string) {
 }
 
 function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
+  if (ms < 1000) return `${ms.toFixed(0)}ms`
   const s = ms / 1000
   if (s < 60) return `${s.toFixed(1)}s`
   const m = Math.floor(s / 60)
@@ -132,7 +144,6 @@ function formatCost(cost: number): string {
 export default function ModelTestPage() {
   const [windows, setWindows] = useState<TestWindow[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const windowIdRef = useRef(0)
 
   // 添加新窗口
   const addWindow = useCallback((modelId?: string) => {
@@ -141,13 +152,16 @@ export default function ModelTestPage() {
 
     const newWindow: TestWindow = {
       id: generateId(),
-      modelId: model.id,
-      params: getDefaultParams(model),
+      models: [{
+        id: generateId(),
+        modelId: model.id,
+        params: getDefaultParams(model),
+      }],
       drawCount: 1,
-      status: "idle",
-      results: [],
+      modelResults: {},
       isExpanded: true,
       isMinimized: false,
+      globalStatus: "idle",
     }
     setWindows((prev) => [...prev, newWindow])
   }, [])
@@ -160,10 +174,9 @@ export default function ModelTestPage() {
       const newWindow: TestWindow = {
         ...win,
         id: generateId(),
-        status: "idle",
-        results: [],
-        startTime: undefined,
-        endTime: undefined,
+        models: win.models.map(m => ({ ...m, id: generateId(), params: { ...m.params } })),
+        modelResults: {},
+        globalStatus: "idle",
       }
       return [...prev, newWindow]
     })
@@ -181,145 +194,228 @@ export default function ModelTestPage() {
     )
   }, [])
 
-  // 更新窗口参数
-  const updateWindowParam = useCallback(
-    (windowId: string, key: string, value: unknown) => {
-      setWindows((prev) =>
-        prev.map((w) =>
-          w.id === windowId ? { ...w, params: { ...w.params, [key]: value } } : w
-        )
-      )
-    },
-    []
-  )
-
-  // 切换模型
-  const changeModel = useCallback((windowId: string, modelId: string) => {
+  // 添加模型到窗口
+  const addModelToWindow = useCallback((windowId: string, modelId: string) => {
     const model = getModelById(modelId)
     if (!model) return
-    setWindows((prev) =>
-      prev.map((w) =>
-        w.id === windowId
-          ? { ...w, modelId, params: getDefaultParams(model), results: [], status: "idle" }
-          : w
-      )
-    )
-  }, [])
-
-  // 运行测试（模拟）
-  const runTest = useCallback((windowId: string) => {
+    
     setWindows((prev) =>
       prev.map((w) => {
         if (w.id !== windowId) return w
-        const model = getModelById(w.modelId)
-        if (!model) return w
-
-        // 初始化结果
-        const results: TestResult[] = Array.from({ length: w.drawCount }).map((_, i) => ({
-          index: i,
-          status: "pending",
-        }))
-
+        if (w.models.length >= 4) return w // 最多 4 个
         return {
           ...w,
-          status: "running",
-          results,
-          startTime: Date.now(),
-          endTime: undefined,
+          models: [...w.models, {
+            id: generateId(),
+            modelId: model.id,
+            params: getDefaultParams(model),
+          }],
         }
       })
     )
+  }, [])
 
-    // 模拟逐个执行
-    const win = windows.find((w) => w.id === windowId)
-    if (!win) return
-    const model = getModelById(win.modelId)
+  // 从窗口移除模型
+  const removeModelFromWindow = useCallback((windowId: string, modelConfigId: string) => {
+    setWindows((prev) =>
+      prev.map((w) => {
+        if (w.id !== windowId) return w
+        if (w.models.length <= 1) return w // 至少保留 1 个
+        const newResults = { ...w.modelResults }
+        delete newResults[modelConfigId]
+        return {
+          ...w,
+          models: w.models.filter(m => m.id !== modelConfigId),
+          modelResults: newResults,
+        }
+      })
+    )
+  }, [])
+
+  // 更新模型配置
+  const updateModelConfig = useCallback((windowId: string, modelConfigId: string, updates: Partial<ModelTestConfig>) => {
+    setWindows((prev) =>
+      prev.map((w) => {
+        if (w.id !== windowId) return w
+        return {
+          ...w,
+          models: w.models.map(m => m.id === modelConfigId ? { ...m, ...updates } : m),
+        }
+      })
+    )
+  }, [])
+
+  // 切换模型
+  const changeModel = useCallback((windowId: string, modelConfigId: string, newModelId: string) => {
+    const model = getModelById(newModelId)
     if (!model) return
+    
+    setWindows((prev) =>
+      prev.map((w) => {
+        if (w.id !== windowId) return w
+        const newResults = { ...w.modelResults }
+        delete newResults[modelConfigId]
+        return {
+          ...w,
+          models: w.models.map(m => 
+            m.id === modelConfigId 
+              ? { ...m, modelId: newModelId, params: getDefaultParams(model) }
+              : m
+          ),
+          modelResults: newResults,
+        }
+      })
+    )
+  }, [])
 
-    let currentIndex = 0
-    const runNext = () => {
-      if (currentIndex >= win.drawCount) {
-        // 完成
-        setWindows((prev) =>
-          prev.map((w) =>
-            w.id === windowId ? { ...w, status: "completed", endTime: Date.now() } : w
-          )
-        )
-        return
+  // 更新参数
+  const updateParam = useCallback((windowId: string, modelConfigId: string, key: string, value: unknown) => {
+    setWindows((prev) =>
+      prev.map((w) => {
+        if (w.id !== windowId) return w
+        return {
+          ...w,
+          models: w.models.map(m => 
+            m.id === modelConfigId 
+              ? { ...m, params: { ...m.params, [key]: value } }
+              : m
+          ),
+        }
+      })
+    )
+  }, [])
+
+  // 运行测试
+  const runTest = useCallback((windowId: string) => {
+    const win = windows.find(w => w.id === windowId)
+    if (!win) return
+
+    // 初始化所有模型的结果
+    const initialResults: Record<string, ModelTestResult> = {}
+    win.models.forEach(mc => {
+      initialResults[mc.id] = {
+        modelId: mc.modelId,
+        status: "running",
+        results: Array.from({ length: win.drawCount }).map((_, i) => ({
+          index: i,
+          status: "pending",
+        })),
+        startTime: Date.now(),
+      }
+    })
+
+    setWindows(prev => prev.map(w => 
+      w.id === windowId 
+        ? { ...w, globalStatus: "running", modelResults: initialResults }
+        : w
+    ))
+
+    // 为每个模型并行执行测试
+    win.models.forEach(mc => {
+      const model = getModelById(mc.modelId)
+      if (!model) return
+
+      let currentIndex = 0
+      const runNext = () => {
+        if (currentIndex >= win.drawCount) {
+          // 该模型完成
+          setWindows(prev => prev.map(w => {
+            if (w.id !== windowId) return w
+            const newResults = { ...w.modelResults }
+            if (newResults[mc.id]) {
+              newResults[mc.id] = { ...newResults[mc.id], status: "completed", endTime: Date.now() }
+            }
+            // 检查是否所有模型都完成
+            const allCompleted = Object.values(newResults).every(r => r.status === "completed" || r.status === "error")
+            return { 
+              ...w, 
+              modelResults: newResults,
+              globalStatus: allCompleted ? "completed" : w.globalStatus,
+            }
+          }))
+          return
+        }
+
+        // 开始当前项
+        setWindows(prev => prev.map(w => {
+          if (w.id !== windowId) return w
+          const newResults = { ...w.modelResults }
+          if (newResults[mc.id]) {
+            const results = [...newResults[mc.id].results]
+            results[currentIndex] = { ...results[currentIndex], status: "running" }
+            newResults[mc.id] = { ...newResults[mc.id], results }
+          }
+          return { ...w, modelResults: newResults }
+        }))
+
+        // 模拟执行
+        const duration = (model.estimatedDuration || 5) * 1000 * (0.5 + Math.random())
+        const baseCost = model.costPerCall || 0.1
+        const cost = baseCost * (0.8 + Math.random() * 0.4)
+
+        setTimeout(() => {
+          const isSuccess = Math.random() > 0.05
+
+          setWindows(prev => prev.map(w => {
+            if (w.id !== windowId) return w
+            const newResults = { ...w.modelResults }
+            if (newResults[mc.id]) {
+              const results = [...newResults[mc.id].results]
+              results[currentIndex] = {
+                ...results[currentIndex],
+                status: isSuccess ? "completed" : "error",
+                duration,
+                cost: isSuccess ? cost : 0,
+                seed: Math.floor(Math.random() * 4294967295),
+                output: isSuccess
+                  ? model.outputType === "text"
+                    ? generateMockTextOutput(model)
+                    : generateMockMediaOutput(model)
+                  : undefined,
+                error: isSuccess ? undefined : "API 调用失败",
+              }
+              newResults[mc.id] = { ...newResults[mc.id], results }
+            }
+            return { ...w, modelResults: newResults }
+          }))
+
+          currentIndex++
+          runNext()
+        }, Math.min(duration, 2000))
       }
 
-      // 开始当前项
-      setWindows((prev) =>
-        prev.map((w) => {
-          if (w.id !== windowId) return w
-          const newResults = [...w.results]
-          newResults[currentIndex] = { ...newResults[currentIndex], status: "running" }
-          return { ...w, results: newResults }
-        })
-      )
-
-      // 模拟执行时间
-      const duration = (model.estimatedDuration || 5) * 1000 * (0.5 + Math.random())
-      const baseCost = model.costPerCall || 0.1
-      const cost = baseCost * (0.8 + Math.random() * 0.4)
-
-      setTimeout(() => {
-        const isSuccess = Math.random() > 0.05 // 95% 成功率
-
-        setWindows((prev) =>
-          prev.map((w) => {
-            if (w.id !== windowId) return w
-            const newResults = [...w.results]
-            newResults[currentIndex] = {
-              ...newResults[currentIndex],
-              status: isSuccess ? "completed" : "error",
-              duration,
-              cost: isSuccess ? cost : 0,
-              seed: Math.floor(Math.random() * 4294967295),
-              output: isSuccess
-                ? model.outputType === "text"
-                  ? generateMockTextOutput(model)
-                  : generateMockMediaOutput(model)
-                : undefined,
-              error: isSuccess ? undefined : "API 调用失败：超时",
-            }
-            return { ...w, results: newResults }
-          })
-        )
-
-        currentIndex++
-        runNext()
-      }, Math.min(duration, 3000)) // 最多模拟 3 秒
-    }
-
-    runNext()
+      runNext()
+    })
   }, [windows])
 
   // 停止测试
   const stopTest = useCallback((windowId: string) => {
-    setWindows((prev) =>
-      prev.map((w) => {
-        if (w.id !== windowId) return w
-        // 将 pending 状态改为 idle
-        const newResults = w.results.map((r) =>
-          r.status === "pending" || r.status === "running"
-            ? { ...r, status: "error" as const, error: "已停止" }
-            : r
-        )
-        return { ...w, status: "completed", results: newResults, endTime: Date.now() }
+    setWindows(prev => prev.map(w => {
+      if (w.id !== windowId) return w
+      const newResults = { ...w.modelResults }
+      Object.keys(newResults).forEach(key => {
+        newResults[key] = {
+          ...newResults[key],
+          status: "completed",
+          endTime: Date.now(),
+          results: newResults[key].results.map(r => 
+            r.status === "pending" || r.status === "running"
+              ? { ...r, status: "error" as const, error: "已停止" }
+              : r
+          ),
+        }
       })
-    )
+      return { ...w, globalStatus: "completed", modelResults: newResults }
+    }))
   }, [])
 
   // 重置窗口
   const resetWindow = useCallback((windowId: string) => {
-    setWindows((prev) =>
-      prev.map((w) =>
-        w.id === windowId
-          ? { ...w, status: "idle", results: [], startTime: undefined, endTime: undefined }
-          : w
-      )
-    )
+    setWindows(prev => prev.map(w =>
+      w.id === windowId
+        ? { ...w, globalStatus: "idle", modelResults: {} }
+        : w
+    ))
   }, [])
 
   // 过滤模型
@@ -339,7 +435,7 @@ export default function ModelTestPage() {
         </div>
         <div className="flex items-center gap-2">
           {/* 分类筛选 */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 bg-secondary/30 rounded-lg p-1">
             <Button
               variant={selectedCategory === null ? "secondary" : "ghost"}
               size="sm"
@@ -348,41 +444,40 @@ export default function ModelTestPage() {
             >
               全部
             </Button>
-            {MODEL_CATEGORIES.map((cat) => (
-              <Button
-                key={cat.id}
-                variant={selectedCategory === cat.id ? "secondary" : "ghost"}
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setSelectedCategory(cat.id)}
-              >
-                {cat.label}
-              </Button>
-            ))}
+            {MODEL_CATEGORIES.map((cat) => {
+              const Icon = getCategoryIcon(cat.id)
+              return (
+                <Button
+                  key={cat.id}
+                  variant={selectedCategory === cat.id ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setSelectedCategory(cat.id)}
+                >
+                  <Icon className="w-3.5 h-3.5 mr-1" />
+                  {cat.label}
+                </Button>
+              )
+            })}
           </div>
           <div className="w-px h-6 bg-border mx-2" />
           {/* 快速添加 */}
-          <Select onValueChange={(v) => addWindow(v)}>
+          <Select onValueChange={(v) => addWindow(v)} value="">
             <SelectTrigger className="w-[200px] h-8 text-xs">
               <SelectValue placeholder="选择模型添加窗口..." />
             </SelectTrigger>
             <SelectContent>
-              {filteredModels.map((model) => (
-                <SelectItem key={model.id} value={model.id} className="text-xs">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "w-2 h-2 rounded-full",
-                        model.category === "llm" && "bg-blue-500",
-                        model.category === "image" && "bg-emerald-500",
-                        model.category === "video" && "bg-purple-500",
-                        model.category === "audio" && "bg-amber-500"
-                      )}
-                    />
-                    {model.name}
-                  </div>
-                </SelectItem>
-              ))}
+              {filteredModels.map((model) => {
+                const Icon = getCategoryIcon(model.category)
+                return (
+                  <SelectItem key={model.id} value={model.id} className="text-xs">
+                    <div className="flex items-center gap-2">
+                      <Icon className="w-3.5 h-3.5" />
+                      {model.name}
+                    </div>
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
           <Button size="sm" className="h-8" onClick={() => addWindow()}>
@@ -392,7 +487,7 @@ export default function ModelTestPage() {
         </div>
       </header>
 
-      {/* Main content - Windows grid */}
+      {/* Main content */}
       <div className="flex-1 overflow-auto p-4">
         {windows.length === 0 ? (
           <div className="h-full flex items-center justify-center">
@@ -408,14 +503,17 @@ export default function ModelTestPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 auto-rows-min">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {windows.map((win) => (
               <TestWindowCard
                 key={win.id}
                 window={win}
+                filteredModels={filteredModels}
                 onUpdate={(updates) => updateWindow(win.id, updates)}
-                onUpdateParam={(key, value) => updateWindowParam(win.id, key, value)}
-                onChangeModel={(modelId) => changeModel(win.id, modelId)}
+                onAddModel={(modelId) => addModelToWindow(win.id, modelId)}
+                onRemoveModel={(configId) => removeModelFromWindow(win.id, configId)}
+                onChangeModel={(configId, modelId) => changeModel(win.id, configId, modelId)}
+                onUpdateParam={(configId, key, value) => updateParam(win.id, configId, key, value)}
                 onRun={() => runTest(win.id)}
                 onStop={() => stopTest(win.id)}
                 onReset={() => resetWindow(win.id)}
@@ -434,9 +532,12 @@ export default function ModelTestPage() {
 
 interface TestWindowCardProps {
   window: TestWindow
+  filteredModels: ModelSpec[]
   onUpdate: (updates: Partial<TestWindow>) => void
-  onUpdateParam: (key: string, value: unknown) => void
-  onChangeModel: (modelId: string) => void
+  onAddModel: (modelId: string) => void
+  onRemoveModel: (configId: string) => void
+  onChangeModel: (configId: string, modelId: string) => void
+  onUpdateParam: (configId: string, key: string, value: unknown) => void
   onRun: () => void
   onStop: () => void
   onReset: () => void
@@ -446,37 +547,39 @@ interface TestWindowCardProps {
 
 function TestWindowCard({
   window: win,
+  filteredModels,
   onUpdate,
-  onUpdateParam,
+  onAddModel,
+  onRemoveModel,
   onChangeModel,
+  onUpdateParam,
   onRun,
   onStop,
   onReset,
   onDuplicate,
   onRemove,
 }: TestWindowCardProps) {
-  const model = getModelById(win.modelId)
-  if (!model) return null
-
-  const isRunning = win.status === "running"
-  const isCompleted = win.status === "completed"
-  const CategoryIcon = getCategoryIcon(model.category)
+  const isRunning = win.globalStatus === "running"
+  const isCompleted = win.globalStatus === "completed"
 
   // 统计
-  const completedCount = win.results.filter((r) => r.status === "completed").length
-  const totalDuration = win.results.reduce((sum, r) => sum + (r.duration || 0), 0)
-  const totalCost = win.results.reduce((sum, r) => sum + (r.cost || 0), 0)
+  const totalDuration = Object.values(win.modelResults).reduce((sum, mr) => 
+    sum + mr.results.reduce((s, r) => s + (r.duration || 0), 0), 0)
+  const totalCost = Object.values(win.modelResults).reduce((sum, mr) => 
+    sum + mr.results.reduce((s, r) => s + (r.cost || 0), 0), 0)
+  const completedCount = Object.values(win.modelResults).reduce((sum, mr) => 
+    sum + mr.results.filter(r => r.status === "completed").length, 0)
+  const totalCount = win.models.length * win.drawCount
 
   if (win.isMinimized) {
     return (
       <div className="border border-border rounded-lg bg-card/50 p-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <CategoryIcon className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{model.name}</span>
+          <span className="text-sm font-medium">{win.models.length} 个模型对比</span>
           {isRunning && <Loader2 className="w-4 h-4 animate-spin text-blue-400" />}
           {isCompleted && (
             <Badge variant="outline" className="text-[10px]">
-              {completedCount}/{win.drawCount}
+              {completedCount}/{totalCount}
             </Badge>
           )}
         </div>
@@ -495,20 +598,18 @@ function TestWindowCard({
   return (
     <div
       className={cn(
-        "border rounded-lg bg-card/50 flex flex-col",
+        "border rounded-lg bg-card/50 flex flex-col min-h-[400px]",
         isRunning && "border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.15)]",
-        isCompleted && completedCount === win.drawCount && "border-emerald-500/50",
-        isCompleted && completedCount < win.drawCount && "border-amber-500/50"
+        isCompleted && "border-emerald-500/30"
       )}
     >
       {/* Window header */}
       <div className="h-10 px-3 flex items-center justify-between border-b border-border/50 shrink-0">
         <div className="flex items-center gap-2">
-          <Badge className={cn("text-[10px]", getCategoryColor(model.category))}>
-            <CategoryIcon className="w-3 h-3 mr-1" />
-            {model.category.toUpperCase()}
+          <span className="text-xs font-medium">模型对比测试</span>
+          <Badge variant="outline" className="text-[10px]">
+            {win.models.length}/4 模型
           </Badge>
-          <span className="text-xs font-medium truncate max-w-[150px]">{model.name}</span>
         </div>
         <div className="flex items-center gap-1">
           <TooltipProvider>
@@ -540,183 +641,293 @@ function TestWindowCard({
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 flex flex-col min-h-0">
-        {/* Model selector & draw count */}
-        <div className="p-3 border-b border-border/50 space-y-3">
-          <div className="flex items-center gap-2">
-            <Select value={win.modelId} onValueChange={onChangeModel} disabled={isRunning}>
-              <SelectTrigger className="flex-1 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ALL_MODELS.map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "w-2 h-2 rounded-full",
-                          m.category === "llm" && "bg-blue-500",
-                          m.category === "image" && "bg-emerald-500",
-                          m.category === "video" && "bg-purple-500",
-                          m.category === "audio" && "bg-amber-500"
-                        )}
-                      />
-                      {m.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Draw count slider */}
-          <div className="flex items-center gap-3">
-            <Label className="text-[10px] text-muted-foreground shrink-0">抽卡次数</Label>
-            <Slider
-              value={[win.drawCount]}
-              onValueChange={([v]) => onUpdate({ drawCount: v })}
-              min={1}
-              max={10}
-              step={1}
-              disabled={isRunning}
-              className="flex-1"
-            />
-            <span className="text-xs font-mono w-6 text-center">{win.drawCount}</span>
-          </div>
-
-          {/* Model info */}
-          <p className="text-[10px] text-muted-foreground line-clamp-1">
-            {model.description}
-            {model.vram && <span className="ml-2 text-zinc-500">VRAM: {model.vram}</span>}
-          </p>
+      {/* Draw count & Actions */}
+      <div className="px-3 py-2 border-b border-border/50 flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-1">
+          <Label className="text-[10px] text-muted-foreground shrink-0">抽卡次数</Label>
+          <Slider
+            value={[win.drawCount]}
+            onValueChange={([v]) => onUpdate({ drawCount: v })}
+            min={1}
+            max={10}
+            step={1}
+            disabled={isRunning}
+            className="flex-1 max-w-[150px]"
+          />
+          <span className="text-xs font-mono w-6 text-center">{win.drawCount}</span>
         </div>
 
-        {/* Parameters */}
-        <div
-          className={cn(
-            "border-b border-border/50 overflow-hidden transition-all",
-            win.isExpanded ? "max-h-[300px]" : "max-h-0"
-          )}
-        >
-          <ScrollArea className="h-full max-h-[300px]">
-            <div className="p-3 space-y-3">
-              {model.params.map((param) => (
-                <ParamInput
-                  key={param.key}
-                  param={param}
-                  value={win.params[param.key]}
-                  onChange={(v) => onUpdateParam(param.key, v)}
-                  disabled={isRunning}
-                />
-              ))}
-            </div>
-          </ScrollArea>
-        </div>
-
-        {/* Expand/collapse toggle */}
-        <button
-          className="h-6 flex items-center justify-center text-[10px] text-muted-foreground hover:bg-secondary/30 transition-colors"
-          onClick={() => onUpdate({ isExpanded: !win.isExpanded })}
-        >
-          {win.isExpanded ? (
-            <>
-              <ChevronDown className="w-3 h-3 mr-1" />
-              收起参数
-            </>
-          ) : (
-            <>
-              <ChevronRight className="w-3 h-3 mr-1" />
-              展开参数 ({model.params.length})
-            </>
-          )}
-        </button>
-
-        {/* Results */}
-        {win.results.length > 0 && (
-          <div className="border-t border-border/50 p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">结果</span>
-              <div className="flex items-center gap-3 text-[10px]">
-                <span className="flex items-center gap-1 text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  {formatDuration(totalDuration)}
-                </span>
-                <span className="flex items-center gap-1 text-amber-400">
-                  <DollarSign className="w-3 h-3" />
-                  {formatCost(totalCost)}
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-5 gap-1.5">
-              {win.results.map((result, idx) => (
-                <TooltipProvider key={idx}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div
-                        className={cn(
-                          "h-8 rounded flex items-center justify-center text-[10px] transition-all",
-                          result.status === "pending" && "bg-secondary/30 text-muted-foreground",
-                          result.status === "running" &&
-                            "bg-blue-500/20 text-blue-400 animate-pulse",
-                          result.status === "completed" && "bg-emerald-500/20 text-emerald-400",
-                          result.status === "error" && "bg-red-500/20 text-red-400"
-                        )}
-                      >
-                        {result.status === "pending" && <span>#{idx + 1}</span>}
-                        {result.status === "running" && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                        {result.status === "completed" && <Check className="w-3.5 h-3.5" />}
-                        {result.status === "error" && <AlertCircle className="w-3.5 h-3.5" />}
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[200px]">
-                      <div className="text-[10px] space-y-1">
-                        <p>#{idx + 1} - {result.status}</p>
-                        {result.duration && <p>耗时: {formatDuration(result.duration)}</p>}
-                        {result.cost && <p>成本: {formatCost(result.cost)}</p>}
-                        {result.seed && <p>Seed: {result.seed}</p>}
-                        {result.error && <p className="text-red-400">{result.error}</p>}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ))}
-            </div>
+        {isCompleted && (
+          <div className="flex items-center gap-3 text-[10px]">
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              {formatDuration(totalDuration)}
+            </span>
+            <span className="flex items-center gap-1 text-amber-400">
+              <DollarSign className="w-3 h-3" />
+              {formatCost(totalCost)}
+            </span>
           </div>
         )}
 
-        {/* Actions */}
-        <div className="p-3 border-t border-border/50 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           {isRunning ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              className="flex-1 h-8"
-              onClick={onStop}
-            >
-              <Square className="w-3.5 h-3.5 mr-1.5" />
+            <Button variant="destructive" size="sm" className="h-7" onClick={onStop}>
+              <Square className="w-3 h-3 mr-1" />
               停止
             </Button>
           ) : (
             <>
-              <Button
-                size="sm"
-                className="flex-1 h-8"
-                onClick={onRun}
-                disabled={isRunning}
-              >
-                <Play className="w-3.5 h-3.5 mr-1.5" />
-                运行 ({win.drawCount}x)
+              <Button size="sm" className="h-7" onClick={onRun}>
+                <Play className="w-3 h-3 mr-1" />
+                运行 ({win.models.length}x{win.drawCount})
               </Button>
               {isCompleted && (
-                <Button variant="outline" size="sm" className="h-8" onClick={onReset}>
-                  <RotateCcw className="w-3.5 h-3.5" />
+                <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={onReset}>
+                  <RotateCcw className="w-3 h-3" />
                 </Button>
               )}
             </>
           )}
         </div>
       </div>
+
+      {/* Models grid - Input area */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Expand/collapse toggle */}
+        <button
+          className="h-7 flex items-center justify-center text-[10px] text-muted-foreground hover:bg-secondary/30 transition-colors border-b border-border/50"
+          onClick={() => onUpdate({ isExpanded: !win.isExpanded })}
+        >
+          {win.isExpanded ? (
+            <>
+              <ChevronDown className="w-3 h-3 mr-1" />
+              收起输入参数
+            </>
+          ) : (
+            <>
+              <ChevronRight className="w-3 h-3 mr-1" />
+              展开输入参数
+            </>
+          )}
+        </button>
+
+        {/* Models input section */}
+        {win.isExpanded && (
+          <div className="border-b border-border/50">
+            <ScrollArea className="max-h-[280px]">
+              <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {win.models.map((mc, idx) => {
+                  const model = getModelById(mc.modelId)
+                  if (!model) return null
+                  const CategoryIcon = getCategoryIcon(model.category)
+                  
+                  return (
+                    <div key={mc.id} className="border border-border/50 rounded-lg p-3 bg-secondary/10">
+                      {/* Model header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Badge className={cn("text-[9px]", getCategoryColor(model.category))}>
+                            <CategoryIcon className="w-2.5 h-2.5 mr-0.5" />
+                            {idx + 1}
+                          </Badge>
+                        </div>
+                        {win.models.length > 1 && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5"
+                            onClick={() => onRemoveModel(mc.id)}
+                            disabled={isRunning}
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Model selector */}
+                      <Select 
+                        value={mc.modelId} 
+                        onValueChange={(v) => onChangeModel(mc.id, v)} 
+                        disabled={isRunning}
+                      >
+                        <SelectTrigger className="h-7 text-xs mb-2">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ALL_MODELS.map((m) => {
+                            const Icon = getCategoryIcon(m.category)
+                            return (
+                              <SelectItem key={m.id} value={m.id} className="text-xs">
+                                <div className="flex items-center gap-2">
+                                  <Icon className="w-3 h-3" />
+                                  {m.name}
+                                </div>
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
+
+                      {/* Params */}
+                      <div className="space-y-2">
+                        {model.params.slice(0, 3).map((param) => (
+                          <ParamInput
+                            key={param.key}
+                            param={param}
+                            value={mc.params[param.key]}
+                            onChange={(v) => onUpdateParam(mc.id, param.key, v)}
+                            disabled={isRunning}
+                            compact
+                          />
+                        ))}
+                        {model.params.length > 3 && (
+                          <p className="text-[9px] text-muted-foreground">
+                            +{model.params.length - 3} 更多参数...
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Add model button */}
+                {win.models.length < 4 && (
+                  <Select onValueChange={onAddModel} value="" disabled={isRunning}>
+                    <SelectTrigger className="h-full min-h-[120px] border-dashed">
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Plus className="w-5 h-5" />
+                        <span className="text-xs">添加模型对比</span>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {filteredModels.map((m) => {
+                        const Icon = getCategoryIcon(m.category)
+                        return (
+                          <SelectItem key={m.id} value={m.id} className="text-xs">
+                            <div className="flex items-center gap-2">
+                              <Icon className="w-3 h-3" />
+                              {m.name}
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Output section */}
+        <div className="flex-1 min-h-0">
+          <ScrollArea className="h-full max-h-[300px]">
+            <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {win.models.map((mc) => {
+                const model = getModelById(mc.modelId)
+                if (!model) return null
+                const result = win.modelResults[mc.id]
+                const CategoryIcon = getCategoryIcon(model.category)
+
+                return (
+                  <ModelOutputCard
+                    key={mc.id}
+                    model={model}
+                    result={result}
+                    drawCount={win.drawCount}
+                  />
+                )
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============ 模型输出卡片 ============
+
+interface ModelOutputCardProps {
+  model: ModelSpec
+  result?: ModelTestResult
+  drawCount: number
+}
+
+function ModelOutputCard({ model, result, drawCount }: ModelOutputCardProps) {
+  const CategoryIcon = getCategoryIcon(model.category)
+  const results = result?.results || []
+  const completedCount = results.filter(r => r.status === "completed").length
+  const totalDuration = results.reduce((sum, r) => sum + (r.duration || 0), 0)
+  const totalCost = results.reduce((sum, r) => sum + (r.cost || 0), 0)
+
+  return (
+    <div className="border border-border/50 rounded-lg p-3 bg-secondary/5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Badge className={cn("text-[9px]", getCategoryColor(model.category))}>
+            <CategoryIcon className="w-2.5 h-2.5 mr-0.5" />
+            {model.category.toUpperCase()}
+          </Badge>
+          <span className="text-[10px] font-medium truncate max-w-[100px]">{model.name}</span>
+        </div>
+        {result && (
+          <div className="flex items-center gap-2 text-[9px]">
+            {result.status === "running" && (
+              <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+            )}
+            {result.status === "completed" && (
+              <>
+                <span className="text-muted-foreground">{formatDuration(totalDuration)}</span>
+                <span className="text-amber-400">{formatCost(totalCost)}</span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Results grid */}
+      {results.length > 0 ? (
+        <div className="grid grid-cols-5 gap-1">
+          {results.map((r, idx) => (
+            <TooltipProvider key={idx}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    className={cn(
+                      "h-7 rounded flex items-center justify-center text-[9px] transition-all",
+                      r.status === "pending" && "bg-secondary/30 text-muted-foreground",
+                      r.status === "running" && "bg-blue-500/20 text-blue-400 animate-pulse",
+                      r.status === "completed" && "bg-emerald-500/20 text-emerald-400",
+                      r.status === "error" && "bg-red-500/20 text-red-400"
+                    )}
+                  >
+                    {r.status === "pending" && <span>#{idx + 1}</span>}
+                    {r.status === "running" && <Loader2 className="w-3 h-3 animate-spin" />}
+                    {r.status === "completed" && <Check className="w-3 h-3" />}
+                    {r.status === "error" && <AlertCircle className="w-3 h-3" />}
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[200px]">
+                  <div className="text-[10px] space-y-1">
+                    <p>#{idx + 1} - {r.status}</p>
+                    {r.duration && <p>耗时: {formatDuration(r.duration)}</p>}
+                    {r.cost && <p>成本: {formatCost(r.cost)}</p>}
+                    {r.seed && <p>Seed: {r.seed}</p>}
+                    {r.error && <p className="text-red-400">{r.error}</p>}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ))}
+        </div>
+      ) : (
+        <div className="h-16 flex items-center justify-center text-[10px] text-muted-foreground border border-dashed border-border/50 rounded">
+          点击运行查看输出
+        </div>
+      )}
     </div>
   )
 }
@@ -728,30 +939,17 @@ interface ParamInputProps {
   value: unknown
   onChange: (value: unknown) => void
   disabled?: boolean
+  compact?: boolean
 }
 
-function ParamInput({ param, value, onChange, disabled }: ParamInputProps) {
+function ParamInput({ param, value, onChange, disabled, compact }: ParamInputProps) {
   return (
-    <div className="space-y-1">
+    <div className={cn("space-y-1", compact && "space-y-0.5")}>
       <div className="flex items-center justify-between">
-        <Label className="text-[10px] text-muted-foreground">
+        <Label className={cn("text-muted-foreground", compact ? "text-[9px]" : "text-[10px]")}>
           {param.label}
           {param.required && <span className="text-red-400 ml-0.5">*</span>}
         </Label>
-        {param.description && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger>
-                <span className="text-[9px] text-muted-foreground/60 hover:text-muted-foreground cursor-help">
-                  ?
-                </span>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-[200px] text-[10px]">
-                {param.description}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
       </div>
 
       {param.type === "string" && (
@@ -760,7 +958,7 @@ function ParamInput({ param, value, onChange, disabled }: ParamInputProps) {
           onChange={(e) => onChange(e.target.value)}
           placeholder={param.placeholder}
           disabled={disabled}
-          className="h-7 text-xs"
+          className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs")}
         />
       )}
 
@@ -770,29 +968,22 @@ function ParamInput({ param, value, onChange, disabled }: ParamInputProps) {
           onChange={(e) => onChange(e.target.value)}
           placeholder={param.placeholder}
           disabled={disabled}
-          className="text-xs min-h-[60px] resize-none"
-          rows={3}
+          className={cn(compact ? "text-[10px] min-h-[40px]" : "text-xs min-h-[60px]", "resize-none")}
+          rows={compact ? 2 : 3}
         />
       )}
 
       {param.type === "number" && (
-        <div className="flex items-center gap-2">
-          <Input
-            type="number"
-            value={value as number}
-            onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-            min={param.min}
-            max={param.max}
-            step={param.step}
-            disabled={disabled}
-            className="h-7 text-xs flex-1"
-          />
-          {param.min !== undefined && param.max !== undefined && (
-            <span className="text-[9px] text-muted-foreground shrink-0">
-              [{param.min}-{param.max}]
-            </span>
-          )}
-        </div>
+        <Input
+          type="number"
+          value={value as number}
+          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
+          min={param.min}
+          max={param.max}
+          step={param.step}
+          disabled={disabled}
+          className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs")}
+        />
       )}
 
       {param.type === "select" && param.options && (
@@ -801,7 +992,7 @@ function ParamInput({ param, value, onChange, disabled }: ParamInputProps) {
           onValueChange={(v) => onChange(v)}
           disabled={disabled}
         >
-          <SelectTrigger className="h-7 text-xs">
+          <SelectTrigger className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -815,13 +1006,11 @@ function ParamInput({ param, value, onChange, disabled }: ParamInputProps) {
       )}
 
       {param.type === "file" && (
-        <div className="flex items-center gap-2">
-          <Input
-            type="file"
-            disabled={disabled}
-            className="h-7 text-xs flex-1 file:mr-2 file:py-0 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-secondary file:text-secondary-foreground"
-          />
-        </div>
+        <Input
+          type="file"
+          disabled={disabled}
+          className={cn(compact ? "h-6 text-[10px]" : "h-7 text-xs", "file:mr-2 file:py-0 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-secondary file:text-secondary-foreground")}
+        />
       )}
     </div>
   )
@@ -832,41 +1021,21 @@ function ParamInput({ param, value, onChange, disabled }: ParamInputProps) {
 function generateMockTextOutput(model: ModelSpec): string {
   const samples = [
     "这是一段由 AI 生成的测试文本。根据您的输入，系统已成功处理并返回结果。",
-    "分析完成。检测到 5 个场景，12 个角色，预计生成时间约 45 秒。建议优化：减少复杂镜头数量以降低成本。",
-    '{"status": "success", "analysis": {"scenes": 5, "characters": 12, "estimated_duration": 45}, "recommendations": ["优化镜头数量", "简化过渡效果"]}',
+    "分析完成。检测到 5 个场景，12 个角色，预计生成时间约 45 秒。",
+    '{"status": "success", "scenes": 5, "characters": 12}',
   ]
   return samples[Math.floor(Math.random() * samples.length)]
 }
 
 function generateMockMediaOutput(model: ModelSpec): Record<string, unknown> {
   if (model.outputType === "image") {
-    return {
-      type: "image",
-      url: `/placeholder.svg?w=512&h=512&text=Generated+Image`,
-      width: 1024,
-      height: 1024,
-      format: "PNG",
-    }
+    return { type: "image", width: 1024, height: 1024, format: "PNG" }
   }
   if (model.outputType === "video") {
-    return {
-      type: "video",
-      url: `/placeholder-video.mp4`,
-      width: 832,
-      height: 480,
-      duration: 5.0,
-      fps: 16,
-      format: "MP4",
-    }
+    return { type: "video", width: 832, height: 480, duration: 5.0, fps: 16 }
   }
   if (model.outputType === "audio") {
-    return {
-      type: "audio",
-      url: `/placeholder-audio.wav`,
-      duration: 10.0,
-      sampleRate: 44100,
-      format: "WAV",
-    }
+    return { type: "audio", duration: 10.0, sampleRate: 44100 }
   }
   return { type: "unknown" }
 }
